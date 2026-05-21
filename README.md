@@ -118,6 +118,14 @@ The executor refuses `gpt-5.5-codex` (rejected under ChatGPT-account auth) and `
 
 13 PASS checks, exit 0. If any FAIL, fix before going live.
 
+### Optional: enable the outer pulse (OpenClaw)
+
+If you run OpenClaw, add a `goal-supervisor` agent with a 15-minute heartbeat. The repo includes a reference `HEARTBEAT.md` and the openclaw.json shape under [`docs/openclaw-supervisor/`](./docs/openclaw-supervisor/) (added during initial install — see the install report for the exact JSON entry that was merged).
+
+Without OpenClaw the harness still runs — you just lose stall detection. The inner pulse, Default-FAIL contract, kill switch, steering, and pinned Codex executor all work standalone.
+
+---
+
 ## Register and run a goal
 
 The interface is intentionally minimal — no Discord command parser, no API. Just a script.
