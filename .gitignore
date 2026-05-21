@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Editor cruft
+*.swp
+*~
+.vscode/
+.idea/
+
+# Logs and runtime state generated when the harness runs
+*.log
+.claude/goal-state/
+.claude/.evidence-reads
+AGENT_STOP
+
+# Private working notes (live only in the internal mirror)
+INTERNAL.md
+.context/
