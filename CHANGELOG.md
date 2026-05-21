@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.3.0 - 2026-05-21
+
+Klaus-review parity + 150% performance pass against Anthropic's March 2026
+harness-design article and `anthropics/cwc-long-running-agents`.
+
+- Added `agents/rubrics/{frontend,api,library,data-pipeline}.md` — the
+  four-axis rubric library (design quality / originality / craft /
+  functionality, plus task-appropriate equivalents). Planner now picks
+  one and copies it verbatim into `BUILD_PLAN.md`.
+- Hardened `agents/evaluator.md` with mandatory Playwright MCP for UI
+  tasks, explicit 0–5 score anchors, and few-shot calibration examples
+  so verdicts are consistent run-to-run.
+- Added `hooks/verify-gate-bash.sh` to close the upstream Bash bypass:
+  `sed -i`, `jq … > test-results.json`, redirected python/node writes
+  to the results file are now caught at PreToolUse.
+- Extended `hooks/verify-gate.sh` to per-criterion enforcement when
+  `test-results.json` uses the new `criteria` array with
+  `evidence_paths`. Each criterion's flip from false to true requires
+  that criterion's evidence file to have been Read.
+- Added `hooks/session-start.sh` to re-seed the agent with acceptance
+  contract, last QA verdict + open NEEDS_WORK items, recent commits,
+  recent PROGRESS.md, and the status of `init.sh` on every new session.
+- Added `hooks/pre-compact.sh` to snapshot the contract state into
+  `.claude/goal-state/post-compact-orientation.md` before context
+  compaction (context-anxiety mitigation per March 2026 article).
+- `hooks/heartbeat-stop.sh` now appends a per-round entry to
+  `.claude/goal-state/rounds.json` so the watchdog can enforce a
+  round budget.
+- `scripts/goal-watchdog.py` gains `--kick` and `--max-rounds`. When
+  `QA_REPORT.md` ends NEEDS_WORK and the last beat is fresh, the
+  watchdog launches the next build round via the registered launcher.
+  Beyond `--max-rounds` it writes `ESCALATION.md` and notifies.
+- `scripts/register-goal.sh` now seeds `PROGRESS.md` and `init.sh`
+  alongside `BUILD_PLAN.md`, closing the November 2025 article's
+  primitives gap.
+- `agents/codex-executor.md` no longer hardcodes `/Users/marco/...`.
+  It uses `$HOME/.claude/plugins/...` as the last fallback and fails
+  loud if no harness root resolves.
+- `settings.json` wires the new `SessionStart`, `PreCompact`, and
+  Bash-matcher hooks.
+- `scripts/verify-install.sh` expanded from 17 to 29 PASS checks
+  covering every new primitive end-to-end (per-criterion gate,
+  Bash bypass, session-start orientation, pre-compact snapshot,
+  rounds telemetry, watchdog `--kick`, register-goal seeding).
+- README and CLAUDE.md restructured around the four-axis rubric,
+  active outer driver, context-anxiety hooks, and explicit
+  downscoping of the Discord claim to webhook-only one-way.
+
 ## 0.2.0 - 2026-05-21
 
 March 2026 harness alignment.

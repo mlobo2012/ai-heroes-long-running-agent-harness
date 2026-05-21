@@ -112,8 +112,47 @@ def qa_report_passed(workspace: Path) -> bool:
     return first_nonempty_line(workspace / "QA_REPORT.md") == "PASS"
 
 
+def qa_report_needs_work(workspace: Path) -> bool:
+    return first_nonempty_line(workspace / "QA_REPORT.md") == "NEEDS_WORK"
+
+
 def goal_is_complete(workspace: Path) -> bool:
     return results_are_green(workspace) and qa_report_passed(workspace)
+
+
+def count_rounds(workspace: Path) -> int:
+    path = workspace / ".claude" / "goal-state" / "rounds.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        rounds = data.get("rounds") if isinstance(data, dict) else None
+        return len(rounds) if isinstance(rounds, list) else 0
+    except Exception:
+        return 0
+
+
+def kick_launcher(row: dict[str, Any], dry_run: bool) -> dict[str, Any]:
+    launcher = row.get("launcher")
+    if not isinstance(launcher, str) or not launcher:
+        return {"kicked": False, "reason": "no launcher"}
+    launcher_path = Path(launcher).expanduser()
+    if not launcher_path.exists():
+        return {"kicked": False, "reason": f"launcher missing: {launcher_path}"}
+    if dry_run:
+        return {"kicked": False, "reason": "dry-run", "launcher": str(launcher_path)}
+    import subprocess
+    try:
+        # Fire-and-forget: the launcher is expected to background the
+        # Claude Code session itself.
+        subprocess.Popen(  # noqa: S603
+            [str(launcher_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return {"kicked": True, "launcher": str(launcher_path)}
+    except OSError as exc:
+        return {"kicked": False, "reason": f"launcher failed: {exc}"}
 
 
 def load_watchdog_state(workspace: Path) -> dict[str, Any]:
@@ -199,6 +238,37 @@ def check_once(args: argparse.Namespace) -> int:
                 continue
 
             last_beat = read_last_beat(workspace)
+
+            # --kick: if the builder stopped cleanly with NEEDS_WORK and we
+            # still have round budget, fire the launcher to start the next
+            # build round. This is the active outer driver that turns the
+            # harness from "monitor" to "auto-pilot".
+            if args.kick and qa_report_needs_work(workspace) and last_beat is not None and (now - last_beat) < args.stale_after:
+                rounds_done = count_rounds(workspace)
+                if rounds_done >= args.max_rounds:
+                    escalation = workspace / "ESCALATION.md"
+                    if not args.dry_run:
+                        escalation.write_text(
+                            f"# Escalation — max rounds exhausted ({rounds_done}/{args.max_rounds})\n\n"
+                            f"Last verdict: NEEDS_WORK\nSession: {session_id}\nAt: {iso()}\n\n"
+                            f"The watchdog will not re-kick this session. Operator review required.\n",
+                            encoding="utf-8",
+                        )
+                    content = (
+                        f"⛔ Max rounds reached ({rounds_done}/{args.max_rounds}) for `{agent}` session "
+                        f"`{session_id}`. Escalation note written; ledger entry retained for operator."
+                    )
+                    notify(webhook, content, args.dry_run)
+                    events.append({"type": "max-rounds-escalated", "session_id": session_id, "agent": agent, "rounds": rounds_done})
+                    remaining.append(row)
+                    continue
+                kick_result = kick_launcher(row, args.dry_run)
+                events.append({"type": "kicked-needs-work", "session_id": session_id, "agent": agent, "rounds": rounds_done, **kick_result})
+                if kick_result.get("kicked"):
+                    notify(webhook, f"🔁 Kicked round {rounds_done + 1}/{args.max_rounds} for `{agent}` session `{session_id}` after NEEDS_WORK.", args.dry_run)
+                remaining.append(row)
+                continue
+
             started = parse_started_at(row.get("started_at"))
             anchor = last_beat or started or now
             age = now - anchor
@@ -261,8 +331,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="report actions without writing STEER.md, state, or ledger changes")
     parser.add_argument("--json", action="store_true", help="print machine-readable event summary")
     parser.add_argument("--loop", action="store_true", help="run forever, sleeping --interval seconds between checks")
+    parser.add_argument("--kick", action="store_true", help="re-launch sessions whose QA_REPORT.md ends NEEDS_WORK; capped by --max-rounds")
+    parser.add_argument("--max-rounds", type=int, default=8, help="maximum total rounds before escalation (default: 8)")
     parser.set_defaults(prune_completed=True)
     args = parser.parse_args(argv)
+    if args.max_rounds <= 0:
+        parser.error("--max-rounds must be positive")
 
     if args.stale_after <= 0 or args.interval <= 0 or args.repeat_after <= 0:
         parser.error("--stale-after, --interval, and --repeat-after must be positive")

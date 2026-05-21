@@ -139,6 +139,43 @@ PY
 
 append_active
 
+if [ ! -f "$WORKSPACE/PROGRESS.md" ]; then
+  cat > "$WORKSPACE/PROGRESS.md" <<'PROGRESS'
+# PROGRESS
+
+## Done
+
+(none yet)
+
+## In progress
+
+(none yet)
+
+## Next
+
+(planner will populate from BUILD_PLAN.md)
+
+## Notes
+
+The builder updates this file at the end of every session. The
+session-start hook surfaces the latest entries automatically on the
+next session.
+PROGRESS
+fi
+
+if [ ! -f "$WORKSPACE/init.sh" ]; then
+  cat > "$WORKSPACE/init.sh" <<'INIT'
+#!/usr/bin/env bash
+# init.sh — workspace orientation / dev-server starter.
+# Replace this stub with the project's actual startup once known.
+# Builder: keep this idempotent and safe to re-run.
+set -euo pipefail
+echo "init.sh stub — replace with the real startup. Returning OK."
+exit 0
+INIT
+  chmod +x "$WORKSPACE/init.sh"
+fi
+
 if [ ! -f "$WORKSPACE/BUILD_PLAN.md" ]; then
   python3 - "$WORKSPACE/BUILD_PLAN.md" "$GOAL" <<'PY'
 import sys

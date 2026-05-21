@@ -1,6 +1,6 @@
 {
   "name": "discord-long-running-harness",
-  "version": "0.2.0",
-  "description": "Long-running Claude Code harness aligned with Anthropic March 2026 primitives: planner, generator, skeptical evaluator, standalone watchdog, and optional OpenClaw supervisor adapter.",
+  "version": "0.3.0",
+  "description": "Long-running Claude Code harness aligned with Anthropic March 2026 primitives: four-axis rubric library, planner / generator / Playwright-driven evaluator, per-criterion evidence gate, Bash-bypass gate, SessionStart + PreCompact context-anxiety hooks, active outer driver with round budget, and optional OpenClaw supervisor adapter.",
   "author": "AI Heroes / Marco"
 }

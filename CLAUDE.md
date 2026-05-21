@@ -3,16 +3,20 @@
 
 # Discord Long-Running Harness
 
-Discord is your operator console. Treat the bound Discord channel as the place where Marco starts goals, steers live work, asks for status, and stops a run. Keep visible replies concise and state-based: blocker, approval needed, plan ready, QA needs work, stall, completion, or final result.
+Discord is the status channel for the operator. The current Discord
+surface is one-way: webhook notifications go out, operator steering
+comes back through `STEER.md` on disk. Keep visible replies concise and
+state-based: blocker, approval needed, plan ready, QA needs work, stall,
+completion, or final result.
 
 ## The Loop
 
-The default shape is the March 2026 planner -> generator -> evaluator loop:
+The default shape is the March 2026 planner -> generator -> evaluator loop, scored on a four-axis rubric:
 
-1. Planner turns the operator goal into `BUILD_PLAN.md` and initializes `test-results.json` with every criterion set to `"passes": false`.
-2. Generator builds against that plan and produces real evidence.
-3. Evaluator reviews from fresh context and writes `QA_REPORT.md`.
-4. The heartbeat hook only allows completion when `test-results.json` is green and `QA_REPORT.md` starts with `PASS`.
+1. Planner turns the operator goal into `BUILD_PLAN.md`, picks the right rubric from `agents/rubrics/` and copies it verbatim, and initializes `test-results.json` with every criterion set to `"passes": false` and an `evidence_paths` list per criterion.
+2. Generator builds against that plan, produces evidence at the declared paths, opens each artifact with Read before flipping its criterion to passing.
+3. Evaluator reviews from fresh context, drives the live app through Playwright MCP for UI work, scores each axis 0-5, and writes `QA_REPORT.md`.
+4. The heartbeat hook only allows completion when `test-results.json` is green and `QA_REPORT.md` starts with `PASS`. Round verdicts are appended to `.claude/goal-state/rounds.json` so the watchdog can enforce a round budget.
 
 Do not treat builder-written tests as final truth. The evaluator is the release gate.
 
@@ -46,7 +50,7 @@ A criterion is only passing after you have:
 3. Opened the screenshot, console log, test output, trace, or result file with the Read tool.
 4. Confirmed the evidence shows what it should.
 
-The `verify-gate` hook denies writes to `test-results.json` until evidence has been opened. Do not work around it.
+The `verify-gate` hook denies writes to `test-results.json` until the relevant `evidence_paths` have been opened. The companion `verify-gate-bash` hook catches `sed`/`jq`/`python` rewrites of the results file. Do not work around either of them.
 
 ## Evaluator Gate
 
@@ -63,9 +67,12 @@ The Stop/SubagentStop heartbeat hook writes `.claude/goal-state/last-beat` so th
 ## Operator Controls
 
 - `AGENT_STOP` in the workspace lets the session stop cleanly at the next hook boundary.
-- `STEER.md` lets Marco redirect the run mid-stream.
+- `STEER.md` lets the operator redirect the run mid-stream.
 - `~/.claude/goal-sessions/active.jsonl` is the supervisor's source of truth for active goals.
 - `.claude/goal-state/goal-state.json` records the current goal session in the workspace.
+- `.claude/goal-state/rounds.json` records the per-round verdict history; consumed by `goal-watchdog.py --kick --max-rounds`.
+- `.claude/goal-state/post-compact-orientation.md` is written by the PreCompact hook so the agent can recover the acceptance contract after compaction.
+- `ESCALATION.md` is written by the watchdog when the round budget is exhausted on a still-NEEDS_WORK goal.
 
 ## Commit Often
 

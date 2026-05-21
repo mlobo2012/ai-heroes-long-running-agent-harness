@@ -2,7 +2,7 @@
 
 A two-pulse harness for **Claude Code** that lets an agent work on a real goal for hours without going silently dead.
 
-The current shape follows Anthropic's March 2026 long-running-app harness direction: plan first, build against a contract, evaluate from fresh context, then loop until the evaluator says PASS. The AI Heroes additions are the outer watchdog, a pinned Codex executor, and OpenClaw/Discord operator ergonomics.
+The current shape follows Anthropic's March 2026 long-running-app harness direction: plan first against a four-axis rubric, build against a contract, evaluate from fresh context with a browser, then loop until the evaluator says PASS. The AI Heroes additions are the outer watchdog with active re-kick, per-criterion evidence linkage, a Bash-bypass gate, a SessionStart/PreCompact pair for context anxiety, a rubric library, a pinned Codex executor, and OpenClaw/Discord operator ergonomics.
 
 Built on top of Anthropic's published work:
 
@@ -58,17 +58,32 @@ The planner creates the build contract. It contains:
 - product spec
 - observable acceptance criteria
 - evidence required
-- evaluator rubric
+- evaluator rubric — picked from `agents/rubrics/{frontend,api,library,data-pipeline}.md` and copied verbatim
 - suggested build path
 - out-of-scope list
 
-This is where subjective quality becomes gradable. If the task touches UI or design, the plan should define the bar for functionality, craft, design quality, and originality. "Looks good" is not a contract. "No generic purple-gradient card stack, passes contrast, primary flow visible above the fold, screenshots at desktop and mobile" is a contract.
+This is where subjective quality becomes gradable. The rubric uses Anthropic's four axes from the March 2026 article — design quality, originality, craft, functionality — each scored 0–5 with explicit anchors. PASS requires every axis at >= 3 plus all criteria green. "Looks good" is not a contract. "No generic purple-gradient card stack, passes contrast AA, primary flow visible above the fold, screenshots at desktop and mobile, Playwright trace of the primary interaction" is a contract.
 
 ### `test-results.json`
 
-Every acceptance criterion starts as `"passes": false`.
+Every acceptance criterion starts as `"passes": false`. Preferred schema (read by the per-criterion verify-gate):
 
-The builder cannot flip a criterion to true until it has opened evidence with the Read tool. The `verify-gate` hook enforces that. Evidence can be screenshots, console logs, test output, browser traces, generated files, benchmark results, or whatever `BUILD_PLAN.md` requires.
+```json
+{
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "Primary flow renders and is interactive",
+      "evidence_paths": ["screenshots/c1-desktop.png", "screenshots/c1-mobile.png"],
+      "passes": false
+    }
+  ]
+}
+```
+
+The builder cannot flip a criterion to true until it has opened that criterion's `evidence_paths` with the Read tool. The `verify-gate` hook enforces that **per criterion** when the new schema is used, and falls back to session-level when older flat shapes are present.
+
+A companion `verify-gate-bash` hook closes the Bash bypass: `sed -i`, `jq … > test-results.json`, redirected `python` and friends are blocked when they target the results file without prior evidence reads. This is still a teaching example, not a security boundary — Anthropic's upstream caveat applies — but the floor is higher.
 
 This is the Default-FAIL contract from Anthropic's primitives repo. Optimism does not ship.
 
@@ -106,7 +121,19 @@ Builder-written tests are not the final truth. The evaluator is the release gate
 | `AGENT_STOP` | Kill switch. Next hook boundary stops cleanly. |
 | `STEER.md` | Operator steering. Next tool boundary injects the note and resets the block counter. |
 | `.claude/goal-state/heartbeat-stop.log` | Audit trail of the inner loop decisions. |
+| `.claude/goal-state/rounds.json` | Round-by-round verdict log used by `--max-rounds`. |
+| `.claude/goal-state/post-compact-orientation.md` | Snapshot the agent reads after a compaction. |
+| `ESCALATION.md` | Written by `goal-watchdog.py --kick` when the round budget is exhausted. |
 | `~/.claude/goal-sessions/active.jsonl` | Source of truth for the outer watchdog. |
+
+### Context anxiety mitigations
+
+- **SessionStart hook** re-seeds the agent with the acceptance contract, open NEEDS_WORK items, last 10 commits, recent PROGRESS.md, and the status of `init.sh` on every new session. Orientation never depends on CLAUDE.md prose alone.
+- **PreCompact hook** snapshots the contract state into `.claude/goal-state/post-compact-orientation.md` before context compaction, so the post-compact agent can recover what it just lost.
+
+### Active outer driver
+
+`scripts/goal-watchdog.py --kick --max-rounds N` turns the watchdog from a passive smoke alarm into an auto-pilot. When the builder finishes cleanly with `QA_REPORT.md` = `NEEDS_WORK` and the last beat is fresh, the watchdog launches the next build round via the registered launcher. It escalates to `ESCALATION.md` when the round budget is exhausted, so a stuck loop becomes a visible operator event instead of an infinite cost burn.
 
 ---
 
@@ -213,7 +240,7 @@ The executor refuses `gpt-5.5-codex` and `gpt-5.4`. Both fail loud.
 "$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh"
 ```
 
-17 PASS checks, exit 0. OpenClaw is not required.
+29 PASS checks, exit 0. OpenClaw is not required.
 
 ---
 
@@ -289,22 +316,34 @@ agents/
   planner.md                             # Expands goal into BUILD_PLAN.md and test-results.json
   evaluator.md                           # Fresh-context QA gate, writes QA_REPORT.md
   codex-executor.md                      # Optional bounded Codex builder
+  rubrics/
+    frontend.md                          # 4-axis rubric: design / originality / craft / functionality
+    api.md                               # 4-axis rubric for backend services
+    library.md                           # 4-axis rubric for SDKs / packages
+    data-pipeline.md                     # 4-axis rubric for ETL / batch jobs
 hooks/
-  heartbeat-stop.sh                      # Inner pulse, requires green results + QA PASS
+  heartbeat-stop.sh                      # Inner pulse, requires green results + QA PASS, logs rounds.json
   track-read.sh                          # Records opened evidence
-  verify-gate.sh                         # Default-FAIL evidence gate
+  verify-gate.sh                         # Per-criterion Default-FAIL evidence gate (Write/Edit)
+  verify-gate-bash.sh                    # Closes the Bash bypass (sed/jq/python > test-results.json)
+  session-start.sh                       # Re-seeds contract + open NEEDS_WORK on new sessions
+  pre-compact.sh                         # Snapshots contract state before compaction
   kill-switch.sh                         # AGENT_STOP halt
   steer.sh                               # STEER.md operator interrupt
   commit-on-stop.sh                      # Backstop commit
-  discord-notify.sh                      # Optional webhook notification
+  discord-notify.sh                      # Optional webhook notification (one-way, see note below)
 bin/
   codex-spawn.sh                         # Reads pinned CODEX_MODEL and invokes Codex
   enable-for-launcher.sh                 # Safe rollout helper
 scripts/
-  register-goal.sh                       # Registers an active goal session
-  goal-watchdog.py                       # Standalone outer pulse watchdog
-  verify-install.sh                      # 17 PASS checks
+  register-goal.sh                       # Registers an active goal session; seeds BUILD_PLAN/PROGRESS/init.sh
+  goal-watchdog.py                       # Standalone outer pulse watchdog; --kick + --max-rounds for auto-pilot
+  verify-install.sh                      # 29 PASS checks
 ```
+
+### A note on Discord
+
+`hooks/discord-notify.sh` is **one-way**: it posts goal-complete and builder-pass events to a webhook when `DISCORD_NOTIFY_WEBHOOK` is set. There is no bot-side ingestion of operator replies — those still go through `STEER.md` on disk. The README's "Discord is your operator console" framing is the design direction, not the v0.3.0 implementation surface.
 
 ---
 

@@ -9,9 +9,12 @@
 
 # Logs and runtime state generated when the harness runs
 *.log
+__pycache__/
 .claude/goal-state/
 .claude/.evidence-reads
 AGENT_STOP
+STEER.md
+ESCALATION.md
 
 # Private working notes (live only in the internal mirror)
 INTERNAL.md

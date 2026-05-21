@@ -92,6 +92,31 @@ RESULTS_FILE="${RESULTS_FILE:-$WORKDIR/test-results.json}"
 QA_REPORT_FILE="${QA_REPORT_FILE:-$WORKDIR/QA_REPORT.md}"
 GOAL_STATE_FILE="$STATE_DIR/goal-state.json"
 BLOCK_COUNT_FILE="$STATE_DIR/block-count"
+ROUNDS_FILE="$STATE_DIR/rounds.json"
+
+append_round() {
+  verdict="$1"
+  RFILE="$ROUNDS_FILE" VERDICT="$verdict" python3 - <<'PY' 2>/dev/null || true
+import json, os, time
+from pathlib import Path
+path = Path(os.environ["RFILE"])
+verdict = os.environ["VERDICT"]
+try:
+    data = json.loads(path.read_text())
+    if not isinstance(data, dict) or "rounds" not in data:
+        data = {"rounds": []}
+except Exception:
+    data = {"rounds": []}
+data["rounds"].append({
+    "n": len(data["rounds"]) + 1,
+    "verdict": verdict,
+    "at": int(time.time()),
+})
+tmp = path.with_suffix(path.suffix + ".tmp")
+tmp.write_text(json.dumps(data, indent=2) + "\n")
+tmp.replace(path)
+PY
+}
 
 if [ -e "${AGENT_STOP_FILE:-$WORKDIR/AGENT_STOP}" ]; then
   log_status "allow" "operator-kill-switch"
@@ -116,9 +141,14 @@ if results_have_failures; then
 fi
 
 if ! qa_has_pass; then
+  qa_first=$(first_nonempty_line "$QA_REPORT_FILE" || true)
+  if [ "$qa_first" = "NEEDS_WORK" ]; then
+    append_round "NEEDS_WORK"
+  fi
   block_continue "awaiting-evaluator-pass"
 fi
 
+append_round "PASS"
 printf '0\n' > "$BLOCK_COUNT_FILE"
 log_status "allow" "goal-met-with-evaluator-pass"
 exit 0

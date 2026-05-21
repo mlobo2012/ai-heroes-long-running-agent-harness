@@ -12,7 +12,8 @@ You execute one bounded builder brief by spawning Codex through the harness scri
 2. Resolve the harness root robustly:
    - Prefer `${CLAUDE_PLUGIN_ROOT}` when set.
    - Otherwise use `${CLAUDE_PROJECT_DIR}/.claude/plugins/discord-long-running-harness` when present.
-   - Otherwise use `/Users/marco/.claude/plugins/discord-long-running-harness`.
+   - Otherwise check `${HOME}/.claude/plugins/discord-long-running-harness`.
+   - Otherwise fail loud. Do not hardcode user-specific paths.
 3. Run `bin/codex-spawn.sh` with the full builder brief. The script reads `~/.claude/codex-current-model.env`, rejects forbidden models, and invokes Codex with xhigh reasoning.
 4. Capture stdout and stderr to `.claude/goal-state/codex-spawn-<slug>.log` in the current workspace.
 5. Return a concise verdict:
@@ -29,8 +30,12 @@ HARNESS_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -z "$HARNESS_ROOT" ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ -x "${CLAUDE_PROJECT_DIR}/.claude/plugins/discord-long-running-harness/bin/codex-spawn.sh" ]; then
   HARNESS_ROOT="${CLAUDE_PROJECT_DIR}/.claude/plugins/discord-long-running-harness"
 fi
+if [ -z "$HARNESS_ROOT" ] && [ -x "${HOME}/.claude/plugins/discord-long-running-harness/bin/codex-spawn.sh" ]; then
+  HARNESS_ROOT="${HOME}/.claude/plugins/discord-long-running-harness"
+fi
 if [ -z "$HARNESS_ROOT" ]; then
-  HARNESS_ROOT="/Users/marco/.claude/plugins/discord-long-running-harness"
+  echo "codex-executor: cannot resolve harness root (CLAUDE_PLUGIN_ROOT and CLAUDE_PROJECT_DIR unset)" >&2
+  exit 5
 fi
 CODEX_SPAWN_WORKDIR="$PWD" "$HARNESS_ROOT/bin/codex-spawn.sh" "$SPRINT_BRIEF" \
   > ".claude/goal-state/codex-spawn-${BRIEF_SLUG}.log" 2>&1
