@@ -26,12 +26,6 @@ The fix is a second timer at a different cadence. One drives the loop. One watch
 
 The outer pulse only intervenes when state goes stale. It is the safety net, not the engine.
 
-### What about a 60-second outer pulse?
-
-Anthropic's built-in subagent stall timeout is 10 minutes. A faster outer pulse can't act before that anyway, and noisy supervisors get muted. 15 minutes catches the cases the inner loop can't, without spamming.
-
----
-
 ## How it works (first principles)
 
 ```
@@ -123,14 +117,6 @@ The executor refuses `gpt-5.5-codex` (rejected under ChatGPT-account auth) and `
 ```
 
 13 PASS checks, exit 0. If any FAIL, fix before going live.
-
-### Optional: enable the outer pulse (OpenClaw)
-
-If you run OpenClaw, add a `goal-supervisor` agent with a 15-minute heartbeat. The repo includes a reference `HEARTBEAT.md` and the openclaw.json shape under [`docs/openclaw-supervisor/`](./docs/openclaw-supervisor/) (added during initial install — see the install report for the exact JSON entry that was merged).
-
-Without OpenClaw the harness still runs — you just lose stall detection. The inner pulse, Default-FAIL contract, kill switch, steering, and pinned Codex executor all work standalone.
-
----
 
 ## Register and run a goal
 
