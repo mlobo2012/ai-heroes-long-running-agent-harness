@@ -105,6 +105,8 @@ print(json.dumps({
     "started_at": started_at,
     "workspace": workspace,
     "launcher": launcher,
+    "harness_mode": "planner-generator-evaluator",
+    "requires_qa_report": True,
 }, separators=(",", ":")))
 PY
 )"
@@ -137,6 +139,46 @@ PY
 
 append_active
 
+if [ ! -f "$WORKSPACE/BUILD_PLAN.md" ]; then
+  python3 - "$WORKSPACE/BUILD_PLAN.md" "$GOAL" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+goal = sys.argv[2]
+path.write_text(f"""# BUILD_PLAN
+
+## Goal
+
+{goal}
+
+## Product Spec
+
+Planner must fill this in before implementation.
+
+## Acceptance Contract
+
+Planner must create numbered, observable criteria here.
+
+## Evidence Required
+
+Planner must list required evidence artifacts here.
+
+## Evaluator Rubric
+
+Planner must define the PASS bar here.
+
+## Suggested Build Path
+
+Planner must outline the build path here.
+
+## Out of Scope
+
+Planner must list non-goals here.
+""", encoding="utf-8")
+PY
+fi
+
 GOAL_STATE_DIR="$WORKSPACE/.claude/goal-state"
 mkdir -p "$GOAL_STATE_DIR"
 python3 - "$GOAL_STATE_DIR/goal-state.json" "$session_id" "$GOAL" "$started_at" <<'PY'
@@ -157,6 +199,6 @@ tmp.replace(path)
 PY
 
 echo "Registered goal session. In the Claude Discord session, kick:"
-printf '/goal "%s"\n' "$GOAL"
+printf '/goal "Plan the goal in BUILD_PLAN.md, build it, keep test-results.json green, and finish only when QA_REPORT.md starts with PASS: %s"\n' "$GOAL"
 echo "Appended JSON line:"
 printf '%s\n' "$line"

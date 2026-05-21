@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 - 2026-05-21
+
+March 2026 harness alignment.
+
+- Added `agents/planner.md` so goals become `BUILD_PLAN.md`, acceptance criteria, evidence requirements, and evaluator rubrics before implementation.
+- Updated `agents/evaluator.md` to write `QA_REPORT.md` with a required first-line `PASS` or `NEEDS_WORK` verdict.
+- Changed `heartbeat-stop.sh` so final completion requires green `test-results.json` and `QA_REPORT.md` starting with `PASS`.
+- Updated `goal-watchdog.py` and `discord-notify.sh` so completed sessions are only pruned/reported after evaluator PASS.
+- Updated `register-goal.sh` to seed `BUILD_PLAN.md` and print a `/goal` condition that requires planner, results, and evaluator output.
+- Reframed README around planner -> generator -> evaluator. Sprint mode is now optional, not the core architecture.
+- Expanded `verify-install.sh` to test planner/evaluator presence, evaluator-gated heartbeat completion, watchdog pruning, and BUILD_PLAN seeding.
+
 ## 0.1.1 - 2026-05-21
 
 Public watchdog release.

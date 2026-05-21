@@ -13,6 +13,28 @@ log_status() {
   printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$decision" "$reason" >> "$STATE_DIR/heartbeat-stop.log"
 }
 
+block_continue() {
+  reason="$1"
+  count="0"
+  if [ -f "$BLOCK_COUNT_FILE" ]; then
+    count="$(sed -n '1p' "$BLOCK_COUNT_FILE" 2>/dev/null || printf '0')"
+  fi
+  case "$count" in
+    ''|*[!0-9]*) count="0" ;;
+  esac
+
+  if [ "$count" -ge 8 ]; then
+    log_status "allow" "anti-runaway-cap:${reason}"
+    exit 0
+  fi
+
+  count=$((count + 1))
+  printf '%s\n' "$count" > "$BLOCK_COUNT_FILE"
+  log_status "block" "$reason"
+  printf '{"decision":"block","reason":"%s; continue"}\n' "$reason"
+  exit 2
+}
+
 write_state_snapshot() {
   if command -v jq >/dev/null 2>&1; then
     if printf '%s' "$input" | jq -c '{session_id, background_tasks, session_crons}' > "$STATE_DIR/last-beat-state.json" 2>/dev/null; then
@@ -43,21 +65,36 @@ PY
   printf '{"session_id":null,"background_tasks":null,"session_crons":null}\n' > "$STATE_DIR/last-beat-state.json"
 }
 
+first_nonempty_line() {
+  file="$1"
+  if [ ! -f "$file" ]; then
+    return 1
+  fi
+  sed -n '/^[[:space:]]*$/d; s/[[:space:]]*$//; 1p' "$file" 2>/dev/null || true
+}
+
+results_have_pass_fields() {
+  [ -f "$RESULTS_FILE" ] && grep -q '"passes"[[:space:]]*:' "$RESULTS_FILE"
+}
+
+results_have_failures() {
+  [ -f "$RESULTS_FILE" ] && grep -q '"passes"[[:space:]]*:[[:space:]]*false' "$RESULTS_FILE"
+}
+
+qa_has_pass() {
+  [ "$(first_nonempty_line "$QA_REPORT_FILE")" = "PASS" ]
+}
+
 date +%s > "$STATE_DIR/last-beat"
 write_state_snapshot
 
-if [ -e "${AGENT_STOP_FILE:-$WORKDIR/AGENT_STOP}" ]; then
-  log_status "allow" "operator-kill-switch"
-  exit 0
-fi
-
-RESULTS_FILE="$WORKDIR/test-results.json"
+RESULTS_FILE="${RESULTS_FILE:-$WORKDIR/test-results.json}"
+QA_REPORT_FILE="${QA_REPORT_FILE:-$WORKDIR/QA_REPORT.md}"
 GOAL_STATE_FILE="$STATE_DIR/goal-state.json"
 BLOCK_COUNT_FILE="$STATE_DIR/block-count"
 
-if [ -f "$RESULTS_FILE" ] && ! grep -q '"passes"[[:space:]]*:[[:space:]]*false' "$RESULTS_FILE"; then
-  printf '0\n' > "$BLOCK_COUNT_FILE"
-  log_status "allow" "goal-met"
+if [ -e "${AGENT_STOP_FILE:-$WORKDIR/AGENT_STOP}" ]; then
+  log_status "allow" "operator-kill-switch"
   exit 0
 fi
 
@@ -70,21 +107,18 @@ if [ -s "$WORKDIR/STEER.md" ]; then
   printf '0\n' > "$BLOCK_COUNT_FILE"
 fi
 
-count="0"
-if [ -f "$BLOCK_COUNT_FILE" ]; then
-  count="$(sed -n '1p' "$BLOCK_COUNT_FILE" 2>/dev/null || printf '0')"
-fi
-case "$count" in
-  ''|*[!0-9]*) count="0" ;;
-esac
-
-if [ "$count" -ge 8 ]; then
-  log_status "allow" "anti-runaway-cap"
-  exit 0
+if ! results_have_pass_fields; then
+  block_continue "missing-test-results-contract"
 fi
 
-count=$((count + 1))
-printf '%s\n' "$count" > "$BLOCK_COUNT_FILE"
-log_status "block" "goal-not-met"
-printf '{"decision":"block","reason":"goal not met; continue"}\n'
-exit 2
+if results_have_failures; then
+  block_continue "goal-not-met"
+fi
+
+if ! qa_has_pass; then
+  block_continue "awaiting-evaluator-pass"
+fi
+
+printf '0\n' > "$BLOCK_COUNT_FILE"
+log_status "allow" "goal-met-with-evaluator-pass"
+exit 0

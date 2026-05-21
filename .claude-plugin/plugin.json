@@ -1,6 +1,6 @@
 {
   "name": "discord-long-running-harness",
-  "version": "0.1.1",
-  "description": "Two-pulse long-running goal harness for Claude Code agents with Codex sprint execution, a standalone watchdog, and an optional OpenClaw supervisor adapter.",
+  "version": "0.2.0",
+  "description": "Long-running Claude Code harness aligned with Anthropic March 2026 primitives: planner, generator, skeptical evaluator, standalone watchdog, and optional OpenClaw supervisor adapter.",
   "author": "AI Heroes / Marco"
 }

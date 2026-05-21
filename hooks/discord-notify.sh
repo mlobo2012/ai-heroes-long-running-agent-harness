@@ -17,6 +17,7 @@ STATE_DIR="$WORKDIR/.claude/goal-state"
 mkdir -p "$STATE_DIR"
 
 RESULTS_FILE="$WORKDIR/test-results.json"
+QA_REPORT_FILE="$WORKDIR/QA_REPORT.md"
 LAST_STATUS_FILE="$STATE_DIR/last-status"
 LAST_PASS_COUNT_FILE="$STATE_DIR/last-pass-count"
 LOG_FILE="$STATE_DIR/discord-notify.log"
@@ -33,10 +34,16 @@ count_matches() {
 
 true_count="$(count_matches '"passes"[[:space:]]*:[[:space:]]*true' "$RESULTS_FILE")"
 false_count="$(count_matches '"passes"[[:space:]]*:[[:space:]]*false' "$RESULTS_FILE")"
+qa_verdict=""
+if [ -f "$QA_REPORT_FILE" ]; then
+  qa_verdict="$(sed -n '/^[[:space:]]*$/d; s/[[:space:]]*$//; 1p' "$QA_REPORT_FILE" 2>/dev/null || true)"
+fi
 
 status="running"
-if [ -f "$RESULTS_FILE" ] && [ "$true_count" -gt 0 ] && [ "$false_count" -eq 0 ]; then
+if [ -f "$RESULTS_FILE" ] && [ "$true_count" -gt 0 ] && [ "$false_count" -eq 0 ] && [ "$qa_verdict" = "PASS" ]; then
   status="goal-complete"
+elif [ -f "$RESULTS_FILE" ] && [ "$true_count" -gt 0 ] && [ "$false_count" -eq 0 ]; then
+  status="awaiting-evaluator-pass"
 else
   last_pass_count="0"
   if [ -f "$LAST_PASS_COUNT_FILE" ]; then
@@ -46,7 +53,7 @@ else
     ''|*[!0-9]*) last_pass_count="0" ;;
   esac
   if [ "$true_count" -gt "$last_pass_count" ]; then
-    status="sprint-pass"
+    status="builder-pass"
   fi
 fi
 
@@ -56,9 +63,9 @@ if [ -f "$LAST_STATUS_FILE" ]; then
 fi
 
 should_post="false"
-if [ "$status" != "running" ] && [ "$status" != "$last_status" ]; then
+if [ "$status" != "running" ] && [ "$status" != "awaiting-evaluator-pass" ] && [ "$status" != "$last_status" ]; then
   should_post="true"
-elif [ "$status" = "sprint-pass" ]; then
+elif [ "$status" = "builder-pass" ]; then
   last_pass_count="0"
   if [ -f "$LAST_PASS_COUNT_FILE" ]; then
     last_pass_count="$(sed -n '1p' "$LAST_PASS_COUNT_FILE" 2>/dev/null || printf '0')"
@@ -95,8 +102,8 @@ case "$status" in
   goal-complete)
     message="Goal complete: ${goal}"
     ;;
-  sprint-pass)
-    message="Sprint PASS for goal: ${goal}"
+  builder-pass)
+    message="Builder criterion PASS for goal: ${goal}"
     ;;
 esac
 

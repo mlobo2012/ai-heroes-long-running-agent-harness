@@ -84,7 +84,20 @@ def read_last_beat(workspace: Path) -> float | None:
         return None
 
 
-def goal_is_complete(workspace: Path) -> bool:
+def first_nonempty_line(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            stripped = line.strip()
+            if stripped:
+                return stripped
+    except OSError:
+        return ""
+    return ""
+
+
+def results_are_green(workspace: Path) -> bool:
     results = workspace / "test-results.json"
     if not results.exists():
         return False
@@ -93,6 +106,14 @@ def goal_is_complete(workspace: Path) -> bool:
     except OSError:
         return False
     return re.search(r'"passes"\s*:\s*', text) is not None and re.search(r'"passes"\s*:\s*false', text) is None
+
+
+def qa_report_passed(workspace: Path) -> bool:
+    return first_nonempty_line(workspace / "QA_REPORT.md") == "PASS"
+
+
+def goal_is_complete(workspace: Path) -> bool:
+    return results_are_green(workspace) and qa_report_passed(workspace)
 
 
 def load_watchdog_state(workspace: Path) -> dict[str, Any]:

@@ -43,6 +43,14 @@ check_hooks_executable() {
   done
 }
 
+check_agents_present() {
+  [ -f "$PLUGIN_DIR/agents/planner.md" ] || return 1
+  [ -f "$PLUGIN_DIR/agents/evaluator.md" ] || return 1
+  [ -f "$PLUGIN_DIR/agents/codex-executor.md" ] || return 1
+  grep -q 'QA_REPORT.md' "$PLUGIN_DIR/agents/evaluator.md" || return 1
+  grep -q 'BUILD_PLAN.md' "$PLUGIN_DIR/agents/planner.md"
+}
+
 check_watchdog_executable() {
   [ -x "$PLUGIN_DIR/scripts/goal-watchdog.py" ] || return 1
   python3 -m py_compile "$PLUGIN_DIR/scripts/goal-watchdog.py"
@@ -66,6 +74,51 @@ EOF
   "$PLUGIN_DIR/scripts/goal-watchdog.py" --active-file "$tmp/sessions/active.jsonl" --stale-after 1200 --json >/tmp/discord-harness-watchdog-smoke.json
   grep -q 'stale-alert' /tmp/discord-harness-watchdog-smoke.json || return 1
   grep -q 'Watchdog recovery' "$workspace/STEER.md" || return 1
+}
+
+check_heartbeat_requires_qa_pass() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/workspace"
+  mkdir -p "$workspace/.claude/goal-state"
+  printf '{"session_id":"verify","goal":"verify","started_at":"2026-01-01T00:00:00Z"}
+' > "$workspace/.claude/goal-state/goal-state.json"
+  printf '{"items":[{"name":"one","passes":true}]}
+' > "$workspace/test-results.json"
+
+  set +e
+  output="$(cd "$workspace" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' 2>/dev/null)"
+  status=$?
+  set -e
+  [ "$status" -eq 2 ] || return 1
+  printf '%s' "$output" | grep -q 'awaiting-evaluator-pass' || return 1
+
+  printf 'PASS\n\nEvidence checked.\n' > "$workspace/QA_REPORT.md"
+  set +e
+  output="$(cd "$workspace" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' 2>/dev/null)"
+  status=$?
+  set -e
+  [ "$status" -eq 0 ] || return 1
+  grep -q 'goal-met-with-evaluator-pass' "$workspace/.claude/goal-state/heartbeat-stop.log"
+}
+
+check_watchdog_requires_qa_pass() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/workspace"
+  mkdir -p "$workspace/.claude/goal-state" "$tmp/sessions"
+  printf '%s\n' "$(date +%s)" > "$workspace/.claude/goal-state/last-beat"
+  printf '{"items":[{"name":"one","passes":true}]}\n' > "$workspace/test-results.json"
+  cat > "$tmp/sessions/active.jsonl" <<EOF
+{"session_id":"verify-qa","agent":"verify","channel":"0","goal":"verify watchdog qa","started_at":"2026-01-01T00:00:00Z","workspace":"$workspace","launcher":"/tmp/launcher"}
+EOF
+  "$PLUGIN_DIR/scripts/goal-watchdog.py" --active-file "$tmp/sessions/active.jsonl" --json > "$tmp/watchdog-noqa.json"
+  grep -q 'healthy' "$tmp/watchdog-noqa.json" || return 1
+  [ "$(wc -l < "$tmp/sessions/active.jsonl")" -eq 1 ] || return 1
+  printf 'PASS\n\nEvidence checked.\n' > "$workspace/QA_REPORT.md"
+  "$PLUGIN_DIR/scripts/goal-watchdog.py" --active-file "$tmp/sessions/active.jsonl" --json > "$tmp/watchdog-pass.json"
+  grep -q 'complete' "$tmp/watchdog-pass.json" || return 1
+  [ "$(wc -l < "$tmp/sessions/active.jsonl")" -eq 0 ]
 }
 
 check_codex_dry_run() {
@@ -109,23 +162,44 @@ check_register_usage() {
   printf '%s' "$output" | grep -q 'Usage: register-goal.sh'
 }
 
+check_register_creates_build_plan() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/workspace"
+  home="$tmp/home"
+  launcher="$tmp/launcher.sh"
+  mkdir -p "$workspace" "$home"
+  printf '#!/usr/bin/env bash\n' > "$launcher"
+  chmod +x "$launcher"
+  output="$(HOME="$home" "$PLUGIN_DIR/scripts/register-goal.sh" --agent verify --channel 0 --workspace "$workspace" --launcher "$launcher" "verify latest harness" 2>&1)"
+  [ -f "$workspace/BUILD_PLAN.md" ] || return 1
+  grep -q 'planner-generator-evaluator' "$home/.claude/goal-sessions/active.jsonl" || return 1
+  printf '%s' "$output" | grep -q 'QA_REPORT.md starts with PASS'
+}
+
 check_readme_mentions_watchdog() {
   grep -q 'scripts/goal-watchdog.py' "$PLUGIN_DIR/README.md" || return 1
-  grep -q 'OpenClaw option' "$PLUGIN_DIR/README.md"
+  grep -q 'OpenClaw option' "$PLUGIN_DIR/README.md" || return 1
+  grep -q 'planner -> generator -> evaluator' "$PLUGIN_DIR/README.md" || return 1
+  grep -q 'QA_REPORT.md' "$PLUGIN_DIR/README.md"
 }
 
 check "plugin dir and plugin.json" check_plugin_dir
 check "settings.json valid" check_settings_json
 check "hook scripts executable" check_hooks_executable
+check "planner, evaluator, and codex agents present" check_agents_present
 check "standalone watchdog executable" check_watchdog_executable
 check "standalone watchdog help" check_watchdog_help
 check "standalone watchdog stale-session smoke" check_watchdog_smoke
+check "heartbeat requires evaluator PASS" check_heartbeat_requires_qa_pass
+check "watchdog requires evaluator PASS before pruning" check_watchdog_requires_qa_pass
 check "codex-spawn dry-run uses gpt-5.5 xhigh" check_codex_dry_run
 check "CODEX_MODEL env file valid" check_codex_env
 check "forbid gpt-5.4" check_forbidden_model gpt-5.4
 check "forbid gpt-5.5-codex" check_forbidden_model gpt-5.5-codex
 check "goal sessions directory writable" check_goal_sessions_dir
 check "register-goal usage errors" check_register_usage
-check "README documents watchdog and OpenClaw options" check_readme_mentions_watchdog
+check "register-goal creates BUILD_PLAN seed" check_register_creates_build_plan
+check "README documents watchdog, OpenClaw, and v2 loop" check_readme_mentions_watchdog
 
 exit "$failures"
