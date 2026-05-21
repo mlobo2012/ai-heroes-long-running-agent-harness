@@ -1,6 +1,6 @@
 {
   "name": "discord-long-running-harness",
-  "version": "0.1.0",
-  "description": "Two-pulse long-running goal harness for Discord-routed Claude Code agents with Codex sprint execution and an OpenClaw supervisor heartbeat.",
+  "version": "0.1.1",
+  "description": "Two-pulse long-running goal harness for Claude Code agents with Codex sprint execution, a standalone watchdog, and an optional OpenClaw supervisor adapter.",
   "author": "AI Heroes / Marco"
 }

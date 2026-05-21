@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 - 2026-05-21
+
+Public watchdog release.
+
+- Added `scripts/goal-watchdog.py`, a standalone outer-pulse watchdog for users who do not run OpenClaw.
+- The watchdog reads `~/.claude/goal-sessions/active.jsonl`, detects stale `.claude/goal-state/last-beat` files, writes recovery notes to `STEER.md`, optionally posts webhook alerts, and prunes completed sessions.
+- README now explains the two outer-pulse options: standalone watchdog as the public default, OpenClaw supervisor as the native adapter for OpenClaw users.
+- `verify-install.sh` no longer requires OpenClaw for the base public install check.
+
 ## 0.1.0 — 2026-05-21
 
 Initial public release.

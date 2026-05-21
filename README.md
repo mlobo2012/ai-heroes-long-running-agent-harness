@@ -6,8 +6,8 @@ You give it a goal with a programmatic pass signal. The harness keeps Claude loo
 
 Built on top of Anthropic's published primitives ([Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), [Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps), and the reference repo [`anthropics/cwc-long-running-agents`](https://github.com/anthropics/cwc-long-running-agents)). This harness adds the two pieces those primitives leave out:
 
-1. **A stall detector** — the upstream loop is event-driven, so if events stop firing, nothing notices. This adds an outer 15-minute supervisor that catches the silence.
-2. **A pinned Codex executor** — a single env file controls which model your sprints run on. Bump one line when OpenAI ships a new model; no script chases versions.
+1. **A stall detector.** The upstream loop is event-driven, so if events stop firing, nothing notices. This adds an outer 15-minute watchdog that catches the silence. The default public watchdog is standalone. OpenClaw users can use the OpenClaw adapter instead.
+2. **A pinned Codex executor.** A single env file controls which model your sprints run on. Bump one line when OpenAI ships a new model; no script chases versions.
 
 ---
 
@@ -62,6 +62,16 @@ This is the upstream cwc primitive. It is the entire reason this thing terminate
 | `.claude/goal-state/heartbeat-stop.log` | Audit trail of every decision the inner pulse made. |
 | `~/.claude/goal-sessions/active.jsonl` | The outer pulse's source of truth for what's active. |
 
+### Two ways to run the outer pulse
+
+The outer pulse has one job: run outside Claude Code and notice when Claude Code goes quiet. There are two correct hosts for that job.
+
+**Option A: standalone watchdog.** This is the default public path. `scripts/goal-watchdog.py` is a tiny clock-driven process. It reads `~/.claude/goal-sessions/active.jsonl`, checks each workspace's `.claude/goal-state/last-beat`, alerts if the beat is stale, writes a recovery note to `STEER.md`, and removes completed sessions from the active ledger. It can run from cron, launchd, systemd, or a plain terminal loop. No OpenClaw required.
+
+**Option B: OpenClaw supervisor.** This is the native path if you already run OpenClaw. OpenClaw already has named agents, heartbeats, workspaces, and Discord delivery. In that environment, the same outer-pulse idea belongs in an OpenClaw heartbeat because the supervisor is already alive when Claude Code is not.
+
+The rationale is simple. The watchdog must not depend on the process it is watching. Claude Code is the worker. The outer pulse is the smoke alarm. You can mount the smoke alarm as a standalone daemon, or you can use OpenClaw if OpenClaw is already your building management system. The failure property is the same.
+
 ---
 
 ## Install
@@ -69,9 +79,9 @@ This is the upstream cwc primitive. It is the entire reason this thing terminate
 ### Prerequisites
 
 - Claude Code
-- `bash`, `jq` or `python3`, `git`, `uuidgen`
+- `bash`, `python3`, `git`, `uuidgen`
 - A workspace where the agent runs (any directory)
-- Optional: OpenClaw for the outer pulse. Without OpenClaw the inner pulse works fine — you just lose the stall detector.
+- Optional: a webhook URL for stall alerts. Without one, the watchdog still writes recovery notes to `STEER.md`.
 
 ### Plug it into Claude Code
 
@@ -116,13 +126,54 @@ The executor refuses `gpt-5.5-codex` (rejected under ChatGPT-account auth) and `
 "$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh"
 ```
 
-13 PASS checks, exit 0. If any FAIL, fix before going live.
+13 PASS checks, exit 0. If any FAIL, fix before going live. OpenClaw is not required for this check.
 
-### Optional: enable the outer pulse (OpenClaw)
+### Enable the outer pulse with the standalone watchdog
 
-If you run OpenClaw, add a `goal-supervisor` agent with a 15-minute heartbeat. The repo includes a reference `HEARTBEAT.md` and the openclaw.json shape under [`docs/openclaw-supervisor/`](./docs/openclaw-supervisor/) (added during initial install — see the install report for the exact JSON entry that was merged).
+Run it once to inspect the active ledger:
 
-Without OpenClaw the harness still runs — you just lose stall detection. The inner pulse, Default-FAIL contract, kill switch, steering, and pinned Codex executor all work standalone.
+```bash
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/goal-watchdog.py" --json
+```
+
+Run it every 15 minutes from cron:
+
+```cron
+*/15 * * * * $HOME/.claude/plugins/discord-long-running-harness/scripts/goal-watchdog.py >> $HOME/.claude/goal-sessions/watchdog.log 2>&1
+```
+
+Or keep it alive as a plain loop:
+
+```bash
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/goal-watchdog.py" --loop
+```
+
+Default behaviour:
+
+1. Reads `$HOME/.claude/goal-sessions/active.jsonl`.
+2. Checks each workspace for `.claude/goal-state/last-beat`.
+3. If the beat is older than 20 minutes, appends a recovery note to `STEER.md`.
+4. If `GOAL_WATCHDOG_WEBHOOK_URL` or `DISCORD_NOTIFY_WEBHOOK` is set, posts an alert.
+5. If `test-results.json` contains pass/fail results and has no remaining `"passes": false`, removes the session from the active ledger.
+
+Tune it if needed:
+
+```bash
+# Alert after 30 minutes instead of 20
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/goal-watchdog.py" --stale-after 1800
+
+# Alert only, do not write STEER.md
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/goal-watchdog.py" --no-steer
+
+# Dry-run the decisions without writing anything
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/goal-watchdog.py" --dry-run --json
+```
+
+### OpenClaw option
+
+If you already run OpenClaw, use the OpenClaw supervisor instead of the standalone watchdog. Add a `goal-supervisor` agent with a 15-minute heartbeat that reads the same active ledger and applies the same stale-beat rule.
+
+Why keep this option? Because OpenClaw is already an external scheduler, notification router, and operator console. If it is present, duplicating that machinery in a separate daemon is waste. If it is not present, the standalone watchdog gives you the same failure property without importing the rest of our stack.
 
 ---
 
@@ -233,6 +284,7 @@ bin/
   enable-for-launcher.sh                 # Safe rollout helper (dry-run by default)
 scripts/
   register-goal.sh                       # Registers an active goal session
+  goal-watchdog.py                       # Standalone outer pulse watchdog
   verify-install.sh                      # 13 PASS checks
 ```
 
@@ -253,7 +305,7 @@ Check `$HOME/.claude/codex-current-model.env`. Exit code 2 = file missing. Exit 
 The inner pulse respects Anthropic's platform cap. After 8 consecutive blocks, the next turn is allowed to end. This is by design — don't fight it. Either (a) the goal is poorly specified, (b) the agent is making no progress (check `heartbeat-stop.log`), or (c) you need to `STEER.md` it in a different direction.
 
 **The outer pulse never alerts.**
-You don't have OpenClaw installed, or `goal-supervisor` isn't in `~/.openclaw/openclaw.json`. The inner pulse works fine without it; you just lose stall detection.
+If you use the standalone watchdog, confirm it is actually scheduled: cron, launchd, systemd, or `--loop`. Then run `scripts/goal-watchdog.py --dry-run --json` and check the active ledger path. If you use OpenClaw, confirm the `goal-supervisor` heartbeat is installed and reading the same `~/.claude/goal-sessions/active.jsonl` file.
 
 ---
 
@@ -268,6 +320,9 @@ rm -f "$HOME/.claude/codex-current-model.env"
 
 # Remove the active sessions ledger:
 rm -rf "$HOME/.claude/goal-sessions"
+
+# Standalone watchdog:
+# remove the cron/launchd/systemd entry you added
 
 # OpenClaw supervisor (if you set it up):
 # restore openclaw.json from your timestamped backup
@@ -287,7 +342,7 @@ Built on Anthropic's published work:
 - [Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps) (Mar 2026) — the generator/evaluator loop pattern.
 - [`anthropics/cwc-long-running-agents`](https://github.com/anthropics/cwc-long-running-agents) — the demo repo we vendor from (CLAUDE.md, evaluator agent, track-read/verify-gate/kill-switch/steer/commit-on-stop hooks). Apache-2.0.
 
-The two-pulse design, the Codex executor with pinned model, and the OpenClaw supervisor are AI Heroes additions.
+The two-pulse design, the standalone watchdog, the Codex executor with pinned model, and the OpenClaw supervisor adapter are AI Heroes additions.
 
 ## License
 
