@@ -1,0 +1,31 @@
+{
+  "_doc": [
+    "MCP wiring for the evaluator. The frontend rubric requires the evaluator to drive the running app, not just review files.",
+    "Two parallel paths are supported and both are enforced by hooks/heartbeat-stop.sh:",
+    "  1. Browser tasks  -> Playwright MCP (default). Trace lands at playwright-mcp/round-N/trace.zip.",
+    "  2. Desktop / OS tasks -> native computer use (Claude `computer_*` tool family or Codex equivalent). Session log lands at computer-use/round-N/session.jsonl.",
+    "The heartbeat hook reads the active rubric from .claude/goal-state/goal-state.json and refuses goal-completion if interaction evidence is required and missing.",
+    "Uncomment the computer-use server block on machines where you actually want the evaluator to drive a desktop. Leaving it off means desktop tasks must fall back to scripted evidence and will not auto-pass the trace gate."
+  ],
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "env": {
+        "PLAYWRIGHT_TRACE_DIR": "${CLAUDE_PROJECT_DIR}/playwright-mcp"
+      }
+    }
+  },
+  "_computer_use_example": {
+    "doc": "Uncomment into mcpServers when you have a computer-use MCP server installed (Anthropic ships one for Claude; Codex CLI has a built-in equivalent). The harness only requires that, if used, the evaluator writes its action log to computer-use/round-${round}/session.jsonl in the workspace.",
+    "computer-use": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/computer-use-mcp@latest"],
+      "env": {
+        "COMPUTER_USE_SESSION_DIR": "${CLAUDE_PROJECT_DIR}/computer-use",
+        "COMPUTER_USE_DISPLAY": ":1",
+        "COMPUTER_USE_SCREENSHOT_DIR": "${CLAUDE_PROJECT_DIR}/computer-use"
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 A two-pulse harness for **Claude Code** that lets an agent work on a real goal for hours without going silently dead.
 
-The current shape follows Anthropic's March 2026 long-running-app harness direction: plan first against a four-axis rubric, build against a contract, evaluate from fresh context with a browser, then loop until the evaluator says PASS. The AI Heroes additions are the outer watchdog with active re-kick, per-criterion evidence linkage, a Bash-bypass gate, a SessionStart/PreCompact pair for context anxiety, a rubric library, a pinned Codex executor, and OpenClaw/Discord operator ergonomics.
+The current shape follows Anthropic's March 2026 long-running-app harness direction: plan first against a four-axis rubric, **handshake on the contract** before building, build against the contract, **drive the live surface** with Playwright MCP or native computer use, evaluate from fresh context, then loop until the evaluator says PASS. The AI Heroes additions are the outer watchdog with active re-kick, per-criterion evidence linkage, a Bash-bypass gate, a SessionStart/PreCompact pair for context anxiety, a rubric library (frontend/api/library/data-pipeline/**desktop**), a **contract-reviewer handshake**, **interaction-evidence enforcement** (Playwright trace OR computer-use session log), evaluator calibration capture, per-round artifact namespacing, a **bench rig**, headless entry points, worktree-isolated evaluator, model/rubric stamping on every round, a pinned Codex executor, and OpenClaw/Discord operator ergonomics.
 
 Built on top of Anthropic's published work:
 
@@ -21,13 +21,17 @@ The loop is simple because it has to survive unattended execution.
 ```
 operator goal
   -> planner writes BUILD_PLAN.md and default-fail test-results.json
-  -> generator builds against the plan and produces evidence
-  -> evaluator reviews from fresh context and writes QA_REPORT.md
-  -> heartbeat hook blocks until test-results.json is green and QA_REPORT.md starts PASS
+  -> contract-reviewer hands back CONTRACT_OK or specific rewrites
+  -> generator builds against the plan and produces round-N evidence
+  -> evaluator drives the live surface (Playwright MCP / native computer use)
+     from fresh context and writes QA_REPORT.md
+  -> heartbeat hook blocks until test-results.json is green AND
+     QA_REPORT.md starts PASS AND interaction evidence is non-empty
   -> outer watchdog catches silence if the inner loop stops beating
+     and auto-rekicks NEEDS_WORK rounds up to the shared --round-budget
 ```
 
-The default mode is **planner -> generator -> evaluator**.
+The default mode is **planner -> contract-reviewer -> generator -> evaluator**.
 
 Strict sprinting is no longer the default. Older harnesses split everything into small sprints to survive context anxiety and model drift. Newer models can usually carry a longer coherent build. So this repo keeps sprint-style execution as a tool, not as the architecture. Use it when a task naturally decomposes or when you need a bounded Codex implementation unit.
 
@@ -107,10 +111,42 @@ The heartbeat hook only allows final completion when:
 
 1. an active goal exists,
 2. `test-results.json` contains pass/fail entries,
-3. no `"passes": false` entries remain, and
-4. `QA_REPORT.md` starts with `PASS`.
+3. no `"passes": false` entries remain,
+4. `QA_REPORT.md` starts with `PASS`, **and**
+5. if the pinned rubric is `frontend` or `desktop`, a non-empty trace
+   exists under `playwright-mcp/round-N/trace.zip` or
+   `computer-use/round-N/session.jsonl`.
 
 Builder-written tests are not the final truth. The evaluator is the release gate.
+
+### `CONTRACT_REVIEW.md`
+
+Before the generator starts, the planner runs the **contract-reviewer**
+subagent. It returns `CONTRACT_OK` or `CONTRACT_REWRITE` with concrete
+per-criterion rewrites. The handshake terminates only when the reviewer
+returns `CONTRACT_OK` or when `--max-rounds` (default 3) is hit, at
+which point it writes `CONTRACT_OK` with a `Concessions` section so the
+operator knows what the reviewer gave up. This step catches mushy
+criteria before the builder wastes a multi-hour round.
+
+### Interaction-evidence — Playwright MCP and native computer use
+
+Subjective "looks good" cannot pass. For interactive rubrics the
+evaluator must drive the running surface and leave a trace at one of:
+
+| Rubric   | Required trace                                  |
+|----------|-------------------------------------------------|
+| frontend | `playwright-mcp/round-N/trace.zip` (preferred)  |
+| frontend | OR `computer-use/round-N/session.jsonl`         |
+| desktop  | `computer-use/round-N/session.jsonl` (required) |
+| desktop  | (optional `playwright-mcp/...` if also browser) |
+
+`.mcp.json` wires `@playwright/mcp` and points its `PLAYWRIGHT_TRACE_DIR`
+at the workspace. A commented `computer-use` block is included for
+environments that ship Anthropic's computer-use MCP server (or where
+Claude Code / Codex's native computer-use is available); uncomment to
+enable. Same skepticism applies to both: an empty trace is the same as
+no trace, and the heartbeat hook will reject `PASS` either way.
 
 ---
 
@@ -121,10 +157,17 @@ Builder-written tests are not the final truth. The evaluator is the release gate
 | `AGENT_STOP` | Kill switch. Next hook boundary stops cleanly. |
 | `STEER.md` | Operator steering. Next tool boundary injects the note and resets the block counter. |
 | `.claude/goal-state/heartbeat-stop.log` | Audit trail of the inner loop decisions. |
-| `.claude/goal-state/rounds.json` | Round-by-round verdict log used by `--max-rounds`. |
+| `.claude/goal-state/rounds.json` | Round-by-round verdict log stamped with rubric, model, codex_model, evidence count, and best-effort axis scores. |
+| `.claude/goal-state/round-budget` | Shared cap honored by both the heartbeat hook and the watchdog `--max-rounds`. |
 | `.claude/goal-state/post-compact-orientation.md` | Snapshot the agent reads after a compaction. |
-| `ESCALATION.md` | Written by `goal-watchdog.py --kick` when the round budget is exhausted. |
+| `.claude/goal-state/evaluator-calibration.jsonl` | Operator overrides on past evaluator verdicts; the evaluator reads the tail before grading. |
+| `ESCALATION.md` | Written by `hooks/heartbeat-stop.sh` and `goal-watchdog.py --kick` when the round budget is exhausted. Notifications fire on the configured webhook. |
 | `~/.claude/goal-sessions/active.jsonl` | Source of truth for the outer watchdog. |
+| `scripts/calibrate-evaluator.sh` | Record an operator override so the next evaluator round sees it. |
+| `scripts/diff-rounds.sh A B` | Markdown diff between round A and B (verdicts, axis scores, criterion deltas, artifact counts). |
+| `scripts/run-evaluator.sh [--isolated]` | Run the evaluator headless; `--isolated` uses a throwaway `git worktree`. |
+| `scripts/run-contract-review.sh` | Run the contract-reviewer headless against `BUILD_PLAN.md`. |
+| `scripts/bench-harness.sh + bench-score.py` | End-to-end bench rig and score-diff tool. |
 
 ### Context anxiety mitigations
 
@@ -240,7 +283,9 @@ The executor refuses `gpt-5.5-codex` and `gpt-5.4`. Both fail loud.
 "$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh"
 ```
 
-29 PASS checks, exit 0. OpenClaw is not required.
+48 PASS checks, exit 0. OpenClaw is not required. Four codex-related
+checks may FAIL on environments without `codex` and
+`~/.claude/codex-current-model.env`; that is expected.
 
 ---
 
@@ -252,8 +297,17 @@ The executor refuses `gpt-5.5-codex` and `gpt-5.4`. Both fail loud.
   --channel <discord_channel_id> \
   --workspace "$HOME/path/to/agent/workspace" \
   --launcher "$HOME/.claude/channels/discord/start-klaus.sh" \
+  --rubric frontend \
+  --model claude-opus-4-7 \
+  --codex-model gpt-5.5 \
+  --round-budget 6 \
   "Ship the requested outcome with BUILD_PLAN.md, green test-results.json, and QA_REPORT.md PASS."
 ```
+
+`--rubric` pins the rubric the planner copies and the heartbeat gate
+enforces. `--model` and `--codex-model` are stamped into every
+`rounds.json` entry. `--round-budget` is the shared cap honored by both
+the inner heartbeat hook and the outer watchdog.
 
 What this does:
 
@@ -310,23 +364,26 @@ Small enough to land quickly. Large enough to exercise the whole loop.
 
 ```text
 .claude-plugin/plugin.json               # Plugin manifest
+.mcp.json                                # Playwright MCP wiring (+ commented computer-use MCP example)
 CLAUDE.md                                # Session instructions
 settings.json                            # Hook wiring
 agents/
-  planner.md                             # Expands goal into BUILD_PLAN.md and test-results.json
-  evaluator.md                           # Fresh-context QA gate, writes QA_REPORT.md
+  planner.md                             # Expands goal into BUILD_PLAN.md and test-results.json; runs contract-reviewer
+  contract-reviewer.md                   # Sprint-contract handshake; returns CONTRACT_OK or CONTRACT_REWRITE
+  evaluator.md                           # Fresh-context QA gate; drives Playwright MCP or native computer use; writes QA_REPORT.md
   codex-executor.md                      # Optional bounded Codex builder
   rubrics/
-    frontend.md                          # 4-axis rubric: design / originality / craft / functionality
+    frontend.md                          # 4-axis browser rubric; requires Playwright OR computer-use trace
     api.md                               # 4-axis rubric for backend services
     library.md                           # 4-axis rubric for SDKs / packages
     data-pipeline.md                     # 4-axis rubric for ETL / batch jobs
+    desktop.md                           # 4-axis rubric for non-browser interactive tasks; requires computer-use session
 hooks/
-  heartbeat-stop.sh                      # Inner pulse, requires green results + QA PASS, logs rounds.json
+  heartbeat-stop.sh                      # Inner pulse; requires green results + QA PASS + interaction-evidence; always-explicit escalation; stamps model/rubric in rounds.json
   track-read.sh                          # Records opened evidence
   verify-gate.sh                         # Per-criterion Default-FAIL evidence gate (Write/Edit)
   verify-gate-bash.sh                    # Closes the Bash bypass (sed/jq/python > test-results.json)
-  session-start.sh                       # Re-seeds contract + open NEEDS_WORK on new sessions
+  session-start.sh                       # Re-seeds contract + calibration tail + pinned rubric on new sessions
   pre-compact.sh                         # Snapshots contract state before compaction
   kill-switch.sh                         # AGENT_STOP halt
   steer.sh                               # STEER.md operator interrupt
@@ -336,9 +393,17 @@ bin/
   codex-spawn.sh                         # Reads pinned CODEX_MODEL and invokes Codex
   enable-for-launcher.sh                 # Safe rollout helper
 scripts/
-  register-goal.sh                       # Registers an active goal session; seeds BUILD_PLAN/PROGRESS/init.sh
-  goal-watchdog.py                       # Standalone outer pulse watchdog; --kick + --max-rounds for auto-pilot
-  verify-install.sh                      # 29 PASS checks
+  register-goal.sh                       # Registers a goal session; accepts --rubric, --model, --codex-model, --round-budget
+  goal-watchdog.py                       # Standalone outer pulse watchdog; --kick + --max-rounds with shared budget file
+  run-contract-review.sh                 # Headless wrapper around the contract-reviewer subagent
+  run-evaluator.sh                       # Headless evaluator; --isolated runs in a git worktree
+  calibrate-evaluator.sh                 # Operator override capture for the evaluator-calibration corpus
+  diff-rounds.sh                         # Markdown diff between any two rounds (verdicts, scores, artifacts)
+  bench-harness.sh                       # Bench rig — runs a pilot end-to-end and writes a score JSON
+  bench-score.py                         # Compares two score JSONs (e.g. upstream vs this harness)
+  verify-install.sh                      # 48 PASS checks
+bench/
+  pilots/express-server/                 # Starter pilot for the bench rig (small but real)
 ```
 
 ### A note on Discord

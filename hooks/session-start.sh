@@ -17,6 +17,46 @@ emit() { printf '%s\n' "$1"; }
 emit "## Session orientation (auto-seeded by session-start hook)"
 emit ""
 
+# Pinned rubric, model, and current round — read once and surface up top.
+if [ -f "$WORKDIR/.claude/goal-state/goal-state.json" ]; then
+  python3 - "$WORKDIR/.claude/goal-state/goal-state.json" "$WORKDIR/.claude/goal-state/rounds.json" <<'PY' 2>/dev/null || true
+import json, sys
+from pathlib import Path
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+rubric = d.get("rubric") or "(none pinned)"
+model = d.get("model") or "(unset)"
+budget = d.get("round_budget") or "(default)"
+n = 0
+try:
+    r = json.load(open(sys.argv[2]))
+    rounds = r.get("rounds") if isinstance(r, dict) else None
+    n = len(rounds) if isinstance(rounds, list) else 0
+except Exception:
+    pass
+print(f"### Goal state")
+print()
+print(f"- Rubric: {rubric}")
+print(f"- Model: {model}")
+print(f"- Round budget: {budget}")
+print(f"- Rounds completed: {n} (next round is {n + 1})")
+print()
+PY
+fi
+
+# Calibration tail — operator overrides on prior evaluator verdicts.
+# Surface up to the last 5 entries so the agent's next round bakes them in.
+if [ -f "$WORKDIR/.claude/goal-state/evaluator-calibration.jsonl" ]; then
+  emit "### Evaluator calibration — recent operator overrides"
+  emit ""
+  emit '```'
+  tail -5 "$WORKDIR/.claude/goal-state/evaluator-calibration.jsonl"
+  emit '```'
+  emit ""
+fi
+
 if [ -f "$WORKDIR/BUILD_PLAN.md" ]; then
   emit "### BUILD_PLAN.md — Acceptance Contract"
   emit ""

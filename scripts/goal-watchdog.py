@@ -116,8 +116,62 @@ def qa_report_needs_work(workspace: Path) -> bool:
     return first_nonempty_line(workspace / "QA_REPORT.md") == "NEEDS_WORK"
 
 
+def has_interaction_evidence(workspace: Path) -> bool:
+    """Return True if a non-empty Playwright trace or computer-use session log exists.
+
+    Mirrors hooks/heartbeat-stop.sh::has_interaction_evidence so the
+    watchdog never reports a session as complete while the inner gate is
+    still blocking on the interaction-evidence floor.
+    """
+    pw_root = workspace / "playwright-mcp"
+    cu_root = workspace / "computer-use"
+    try:
+        if pw_root.is_dir():
+            for p in pw_root.rglob("trace.zip"):
+                if p.is_file() and p.stat().st_size > 0:
+                    return True
+    except OSError:
+        pass
+    try:
+        if cu_root.is_dir():
+            for p in cu_root.rglob("session.jsonl"):
+                if p.is_file() and p.stat().st_size > 0:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def goal_state_field(workspace: Path, field: str) -> str:
+    path = workspace / ".claude" / "goal-state" / "goal-state.json"
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+        v = d.get(field)
+        return str(v) if v else ""
+    except Exception:
+        return ""
+
+
 def goal_is_complete(workspace: Path) -> bool:
-    return results_are_green(workspace) and qa_report_passed(workspace)
+    if not (results_are_green(workspace) and qa_report_passed(workspace)):
+        return False
+    rubric = goal_state_field(workspace, "rubric")
+    if rubric in ("frontend", "desktop"):
+        return has_interaction_evidence(workspace)
+    return True
+
+
+def workspace_round_budget(workspace: Path, fallback: int) -> int:
+    rb_file = workspace / ".claude" / "goal-state" / "round-budget"
+    try:
+        v = int(rb_file.read_text().strip())
+        return v if v > 0 else fallback
+    except Exception:
+        pass
+    s = goal_state_field(workspace, "round_budget")
+    if s.isdigit() and int(s) > 0:
+        return int(s)
+    return fallback
 
 
 def count_rounds(workspace: Path) -> int:
@@ -245,27 +299,32 @@ def check_once(args: argparse.Namespace) -> int:
             # harness from "monitor" to "auto-pilot".
             if args.kick and qa_report_needs_work(workspace) and last_beat is not None and (now - last_beat) < args.stale_after:
                 rounds_done = count_rounds(workspace)
-                if rounds_done >= args.max_rounds:
+                # Honor the shared round-budget file (set by register-goal
+                # --round-budget). Inner-loop heartbeat reads the same file.
+                effective_max = workspace_round_budget(workspace, args.max_rounds)
+                if rounds_done >= effective_max:
                     escalation = workspace / "ESCALATION.md"
-                    if not args.dry_run:
+                    if not args.dry_run and not escalation.exists():
                         escalation.write_text(
-                            f"# Escalation — max rounds exhausted ({rounds_done}/{args.max_rounds})\n\n"
-                            f"Last verdict: NEEDS_WORK\nSession: {session_id}\nAt: {iso()}\n\n"
+                            f"# Escalation — max rounds exhausted ({rounds_done}/{effective_max})\n\n"
+                            f"Last verdict: NEEDS_WORK\nSession: {session_id}\nAt: {iso()}\n"
+                            f"Rubric: {goal_state_field(workspace, 'rubric') or '(none)'}\n"
+                            f"Model: {goal_state_field(workspace, 'model') or '(unset)'}\n\n"
                             f"The watchdog will not re-kick this session. Operator review required.\n",
                             encoding="utf-8",
                         )
                     content = (
-                        f"⛔ Max rounds reached ({rounds_done}/{args.max_rounds}) for `{agent}` session "
+                        f"⛔ Max rounds reached ({rounds_done}/{effective_max}) for `{agent}` session "
                         f"`{session_id}`. Escalation note written; ledger entry retained for operator."
                     )
                     notify(webhook, content, args.dry_run)
-                    events.append({"type": "max-rounds-escalated", "session_id": session_id, "agent": agent, "rounds": rounds_done})
+                    events.append({"type": "max-rounds-escalated", "session_id": session_id, "agent": agent, "rounds": rounds_done, "effective_max": effective_max})
                     remaining.append(row)
                     continue
                 kick_result = kick_launcher(row, args.dry_run)
-                events.append({"type": "kicked-needs-work", "session_id": session_id, "agent": agent, "rounds": rounds_done, **kick_result})
+                events.append({"type": "kicked-needs-work", "session_id": session_id, "agent": agent, "rounds": rounds_done, "effective_max": effective_max, **kick_result})
                 if kick_result.get("kicked"):
-                    notify(webhook, f"🔁 Kicked round {rounds_done + 1}/{args.max_rounds} for `{agent}` session `{session_id}` after NEEDS_WORK.", args.dry_run)
+                    notify(webhook, f"🔁 Kicked round {rounds_done + 1}/{effective_max} for `{agent}` session `{session_id}` after NEEDS_WORK.", args.dry_run)
                 remaining.append(row)
                 continue
 

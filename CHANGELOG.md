@@ -1,5 +1,116 @@
 # Changelog
 
+## 0.4.0 - 2026-05-22
+
+Closes the remaining gaps the previous critique surfaced against the
+March 2026 article. Replaces the "150% performance pass" rhetoric with
+a benchmark rig you can actually run.
+
+### Interaction-evidence enforcement (Playwright MCP + native computer use)
+
+- Added `.mcp.json` wiring `@playwright/mcp` for browser-driven
+  evaluation. Trace lands at `playwright-mcp/round-N/trace.zip` via the
+  `PLAYWRIGHT_TRACE_DIR` env var.
+- Added `agents/rubrics/desktop.md` — a new rubric variant for
+  non-browser interactive tasks. Evidence shape:
+  `computer-use/round-N/session.jsonl` (append-only action log) plus
+  `computer-use/round-N/screenshots/*.png`.
+- Updated `agents/rubrics/frontend.md` to accept **either** path. Same
+  guardrails for both.
+- `hooks/heartbeat-stop.sh` now reads the active rubric from
+  `goal-state.json`. For `frontend` or `desktop`, the heartbeat
+  **refuses goal-completion** unless a non-empty trace exists under one
+  of the two paths. The evaluator can no longer rubber-stamp a UI by
+  writing `PASS` without driving it.
+- `goal-watchdog.py::goal_is_complete` mirrors the same gate so the
+  watchdog never reports a session complete while the inner gate is
+  still blocking on interaction-evidence.
+
+### Sprint-contract handshake
+
+- Added `agents/contract-reviewer.md` — a third agent that reviews
+  `BUILD_PLAN.md` before the generator starts. Returns `CONTRACT_OK`
+  or `CONTRACT_REWRITE` with per-criterion rewrites.
+- Added `scripts/run-contract-review.sh` — headless wrapper with
+  configurable `--max-rounds` (default 3) and soft-pass-with-
+  Concessions when the cap is hit.
+- `agents/planner.md` now runs the handshake before returning the plan.
+
+### Unified runaway counter + always-explicit escalation
+
+- `hooks/heartbeat-stop.sh` no longer silently allows after 8 blocks.
+  When the cap is hit it writes `ESCALATION.md`, notifies the
+  configured webhook, and logs `escalated anti-runaway-cap:...`.
+- The cap reads from `.claude/goal-state/round-budget` (set by
+  `register-goal --round-budget`). The watchdog `--max-rounds` honors
+  the same file via `workspace_round_budget()` so both pulses agree
+  on the budget.
+- Watchdog escalation now stamps the rubric and model into
+  `ESCALATION.md`.
+
+### Evaluator calibration capture
+
+- Added `scripts/calibrate-evaluator.sh` — operator override recorder.
+  Writes one JSON line to `.claude/goal-state/evaluator-calibration.jsonl`
+  per override with `{at, round, evaluator_verdict, operator_verdict,
+  axes_in_dispute, reason, goal_id}`.
+- `agents/evaluator.md` now reads the tail of that file on every
+  invocation and applies the operator's past corrections.
+- `hooks/session-start.sh` surfaces the last 5 calibration entries.
+
+### Per-round artifact namespacing + round diff
+
+- Planner declares `screenshots/round-N/`, `evidence/round-N/`,
+  `playwright-mcp/round-N/`, `computer-use/round-N/` paths so old
+  evidence cannot masquerade as fresh.
+- `scripts/diff-rounds.sh` produces a markdown diff between any two
+  rounds: verdicts, axis scores, criterion deltas, artifact counts,
+  and a git-stat between the rounds' recorded commit shas.
+
+### Pinned rubric + model identity stamping
+
+- `scripts/register-goal.sh` accepts `--rubric`, `--model`,
+  `--codex-model`, and `--round-budget`. All four land in
+  `goal-state.json` and (for round-budget) in a dedicated file the
+  heartbeat hook reads.
+- `agents/planner.md` honors the pinned rubric instead of picking
+  freely. Rejects rubric drift mid-run.
+- `hooks/heartbeat-stop.sh::append_round` now stamps `rubric`, `model`,
+  `codex_model`, `evidence_count`, and best-effort `axis_scores` into
+  every `rounds.json` entry. "Re-simplify on upgrade" finally has the
+  data it needs.
+
+### Headless entry points + worktree isolation
+
+- Added `scripts/run-evaluator.sh` — runs the evaluator subagent
+  headless so CI/cron can mirror the harness's PASS gate. Supports
+  `--isolated` to evaluate in a `git worktree` so the evaluator cannot
+  mutate the builder's working tree. Exit codes:
+  0=PASS, 1=NEEDS_WORK, 3=no report, 4=missing interaction evidence.
+
+### Bench rig
+
+- Added `bench/pilots/express-server/` — small but real pilot covering
+  three routes, a 422 path, and four observable acceptance criteria.
+- Added `scripts/bench-harness.sh` — runs a pilot end-to-end and
+  records wall-clock, rounds-to-pass, false-pass rate, and I/O bytes
+  to a score JSON.
+- Added `scripts/bench-score.py` — diffs two score files (e.g.
+  upstream vs this harness) with absolute and percentage deltas.
+- The README's "150% performance" claim now has a way to be earned or
+  retracted with measurement.
+
+### Verify-install expansion
+
+- `scripts/verify-install.sh` grew from 29 to 48 PASS checks covering:
+  .mcp.json, contract-reviewer, desktop rubric, evaluator-calibration
+  reading, planner pinned-rubric, heartbeat interaction-evidence gate
+  (block + allow paths for both trace shapes), always-explicit
+  escalation, register-goal --rubric (accept + reject), calibrate
+  capture, headless entry points, diff-rounds, bench rig presence,
+  session-start calibration surfacing, rounds.json stamping, and
+  watchdog round-budget-file honoring.
+
 ## 0.3.0 - 2026-05-21
 
 Klaus-review parity + 150% performance pass against Anthropic's March 2026

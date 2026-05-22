@@ -6,9 +6,31 @@ when the task is UI-facing. The evaluator scores each axis 0–5 in
 `QA_REPORT.md`. PASS requires every axis at >= 3 AND no `passes: false`
 criterion remaining.
 
-Browser evidence is mandatory for this rubric. The evaluator must drive the
-running app through Playwright MCP (or equivalent browser tooling) and
-capture screenshots plus console output. Static-diff review is not enough.
+Browser evidence is mandatory for this rubric. The evaluator must drive
+the running app through **Playwright MCP** (preferred for browser
+work) or, on environments where the browser surface is part of a wider
+desktop interaction, via **native computer use** (Claude's `computer_*`
+tool family or Codex's equivalent invoked via the configured MCP
+server). The heartbeat hook refuses goal-completion if neither a
+non-empty `playwright-mcp/round-N/trace.zip` nor a non-empty
+`computer-use/round-N/session.jsonl` exists. Static-diff review is not
+enough.
+
+## Interaction-evidence contract
+
+Round-N evidence must land at exactly one of these paths:
+
+- `playwright-mcp/round-N/trace.zip` — Playwright trace covering at
+  least the primary flow. The `PLAYWRIGHT_TRACE_DIR` env var in
+  `.mcp.json` already points the MCP server here; the evaluator must
+  not write elsewhere.
+- `computer-use/round-N/session.jsonl` — append-only action log if the
+  evaluator used native computer use instead. Same shape as the desktop
+  rubric: one JSON object per line.
+
+If both are produced, the gate is doubly satisfied. If neither is, the
+heartbeat hook treats QA_REPORT.md `PASS` as `awaiting-interaction-evidence`
+and refuses to allow goal-completion.
 
 ## Axis 1 — Design Quality (0–5)
 
@@ -70,11 +92,12 @@ Contrast must clear WCAG AA on text. The evaluator should spot-check.
 ## Evidence the evaluator must capture
 
 - Screenshot of each acceptance-criterion screen at desktop (>= 1280px)
-  and mobile (<= 414px).
+  and mobile (<= 414px), under `screenshots/round-N/`.
 - Console-log capture for the same flows (no uncaught errors, no
-  unhandled promise rejections).
-- A Playwright trace or click-by-click description proving the
-  interaction actually worked, not just rendered.
+  unhandled promise rejections), under `evidence/round-N/console-*.txt`.
+- Either a Playwright trace at `playwright-mcp/round-N/trace.zip` OR a
+  computer-use session log at `computer-use/round-N/session.jsonl`. One
+  of these is mandatory; the heartbeat gate enforces it.
 - Contrast spot-check for primary text and primary CTA.
 
 ## PASS bar
@@ -83,7 +106,10 @@ Contrast must clear WCAG AA on text. The evaluator should spot-check.
 - No `passes: false` in `test-results.json`.
 - Every acceptance criterion has at least one piece of evidence opened
   with the Read tool.
-- The evaluator personally drove the app, not just reviewed artifacts.
+- The evaluator personally drove the app this round (via Playwright or
+  native computer use), not just reviewed artifacts.
+- A non-empty interaction trace exists under
+  `playwright-mcp/round-N/trace.zip` or `computer-use/round-N/session.jsonl`.
 
 ## NEEDS_WORK triggers
 

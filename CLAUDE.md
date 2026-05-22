@@ -11,14 +11,15 @@ completion, or final result.
 
 ## The Loop
 
-The default shape is the March 2026 planner -> generator -> evaluator loop, scored on a four-axis rubric:
+The default shape is the March 2026 planner -> contract-reviewer -> generator -> evaluator loop, scored on a four-axis rubric:
 
-1. Planner turns the operator goal into `BUILD_PLAN.md`, picks the right rubric from `agents/rubrics/` and copies it verbatim, and initializes `test-results.json` with every criterion set to `"passes": false` and an `evidence_paths` list per criterion.
-2. Generator builds against that plan, produces evidence at the declared paths, opens each artifact with Read before flipping its criterion to passing.
-3. Evaluator reviews from fresh context, drives the live app through Playwright MCP for UI work, scores each axis 0-5, and writes `QA_REPORT.md`.
-4. The heartbeat hook only allows completion when `test-results.json` is green and `QA_REPORT.md` starts with `PASS`. Round verdicts are appended to `.claude/goal-state/rounds.json` so the watchdog can enforce a round budget.
+1. Planner turns the operator goal into `BUILD_PLAN.md`, **honors the pinned rubric** from `.claude/goal-state/goal-state.json` if one was set (one of frontend / api / library / data-pipeline / desktop), copies the rubric verbatim, and initializes `test-results.json` with every criterion set to `"passes": false` and an `evidence_paths` list per criterion using round-N namespacing.
+2. **Contract-reviewer** subagent reviews `BUILD_PLAN.md` before the generator starts and writes `CONTRACT_REVIEW.md` with `CONTRACT_OK` or `CONTRACT_REWRITE`. The planner re-runs on `CONTRACT_REWRITE` until the reviewer is satisfied or the contract-rounds cap is hit.
+3. Generator builds against the plan, produces round-N evidence at the declared paths, opens each artifact with Read before flipping its criterion to passing.
+4. Evaluator reviews from fresh context. For **frontend** tasks it drives the running app through Playwright MCP and saves the trace at `playwright-mcp/round-N/trace.zip`. For **desktop** / non-browser interactive tasks it drives the surface through native computer use (Claude's `computer_*` tool family or the Codex equivalent via the configured MCP server) and appends every action to `computer-use/round-N/session.jsonl`. It scores each axis 0-5, reads the calibration tail in `.claude/goal-state/evaluator-calibration.jsonl`, and writes `QA_REPORT.md`.
+5. The heartbeat hook only allows completion when `test-results.json` is green, `QA_REPORT.md` starts with `PASS`, **and** (for frontend/desktop) a non-empty interaction trace exists at one of the round-N paths. Round verdicts are appended to `.claude/goal-state/rounds.json` stamped with rubric, model, codex_model, evidence count, and best-effort axis scores. The watchdog enforces the same shared round budget.
 
-Do not treat builder-written tests as final truth. The evaluator is the release gate.
+Do not treat builder-written tests as final truth. The evaluator is the release gate, and for interactive surfaces the evaluator's word only counts when the trace file backs it up.
 
 ## Always Start Here
 
@@ -46,11 +47,15 @@ Never silently fall through to `gpt-5.4`, and never use `gpt-5.5-codex`.
 A criterion is only passing after you have:
 
 1. Run it against the real target.
-2. Produced evidence listed in `BUILD_PLAN.md`.
+2. Produced evidence listed in `BUILD_PLAN.md` under the current round's namespaced path (`screenshots/round-N/...`, `evidence/round-N/...`, `playwright-mcp/round-N/trace.zip`, `computer-use/round-N/session.jsonl`).
 3. Opened the screenshot, console log, test output, trace, or result file with the Read tool.
 4. Confirmed the evidence shows what it should.
 
-The `verify-gate` hook denies writes to `test-results.json` until the relevant `evidence_paths` have been opened. The companion `verify-gate-bash` hook catches `sed`/`jq`/`python` rewrites of the results file. Do not work around either of them.
+For UI / frontend tasks: drive the live app via Playwright MCP (configured in `.mcp.json`). The trace lands automatically under `playwright-mcp/round-N/` via the `PLAYWRIGHT_TRACE_DIR` env var.
+
+For desktop / non-browser interactive tasks: drive the live surface via native computer use. Append every action to `computer-use/round-N/session.jsonl` (one JSON object per line). Same guardrails as Playwright: empty session log is no session log; the heartbeat hook will reject `PASS`.
+
+The `verify-gate` hook denies writes to `test-results.json` until the relevant `evidence_paths` have been opened. The companion `verify-gate-bash` hook catches `sed`/`jq`/`python` rewrites of the results file. The `heartbeat-stop` hook denies goal-completion for frontend/desktop rubrics without an interaction trace. Do not work around any of them.
 
 ## Evaluator Gate
 
@@ -69,10 +74,13 @@ The Stop/SubagentStop heartbeat hook writes `.claude/goal-state/last-beat` so th
 - `AGENT_STOP` in the workspace lets the session stop cleanly at the next hook boundary.
 - `STEER.md` lets the operator redirect the run mid-stream.
 - `~/.claude/goal-sessions/active.jsonl` is the supervisor's source of truth for active goals.
-- `.claude/goal-state/goal-state.json` records the current goal session in the workspace.
-- `.claude/goal-state/rounds.json` records the per-round verdict history; consumed by `goal-watchdog.py --kick --max-rounds`.
+- `.claude/goal-state/goal-state.json` records the current goal session, the pinned rubric, the intended model, and the round budget.
+- `.claude/goal-state/rounds.json` records the per-round verdict stamped with rubric, model, codex_model, evidence_count, and axis_scores. Consumed by both `hooks/heartbeat-stop.sh` and `goal-watchdog.py --kick --max-rounds`.
+- `.claude/goal-state/round-budget` is the shared cap the heartbeat and watchdog both read; set it with `register-goal --round-budget N`.
+- `.claude/goal-state/evaluator-calibration.jsonl` is the operator-override corpus the evaluator reads on every grading pass. Append with `scripts/calibrate-evaluator.sh`.
 - `.claude/goal-state/post-compact-orientation.md` is written by the PreCompact hook so the agent can recover the acceptance contract after compaction.
-- `ESCALATION.md` is written by the watchdog when the round budget is exhausted on a still-NEEDS_WORK goal.
+- `ESCALATION.md` is written by **both** the heartbeat hook (on runaway-cap inside the worker) and the watchdog (on `--max-rounds` exhaustion). The configured webhook is notified once per escalation.
+- `CONTRACT_REVIEW.md` is the latest verdict from the contract-reviewer subagent (`CONTRACT_OK` or `CONTRACT_REWRITE`).
 
 ## Commit Often
 

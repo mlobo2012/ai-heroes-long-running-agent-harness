@@ -1,0 +1,21 @@
+Create a minimal Express server on port 3001 with three routes:
+- GET /            returns {"name":"express-pilot","version":"0.1.0"} as JSON
+- GET /health      returns {"status":"ok"} as JSON
+- GET /echo?msg=…  returns {"echo": <msg>} as JSON; missing msg returns
+                   422 with {"error":"missing-msg"} as JSON
+
+Planner must produce BUILD_PLAN.md with at least four observable
+acceptance criteria (one per route + one for the 422 path) and initialize
+test-results.json with each criterion set to passes:false and
+evidence_paths pointing at curl output files under evidence/round-N/.
+
+Builder must implement the server, run it, and produce curl-based
+evidence at the declared paths. The builder must open every evidence
+file with Read before flipping any criterion to passing.
+
+Evaluator must drive the server itself (curl is fine — this is an API
+task; the api rubric does not require Playwright). It must write
+QA_REPORT.md starting with bare PASS or NEEDS_WORK on line 1.
+
+Goal is complete only when test-results.json has no passes:false rows
+AND QA_REPORT.md starts with PASS.
