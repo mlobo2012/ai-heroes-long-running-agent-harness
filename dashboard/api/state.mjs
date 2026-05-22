@@ -23,8 +23,19 @@ export default async function handler(request, response) {
       response.status(200).json(emptyState());
       return;
     }
-    const snapshots = await list({ prefix: snapshotPrefix, limit: 100 });
-    const blob = (snapshots.blobs || [])
+    // Snapshot filenames are `{Date.now()}.json`, so Vercel Blob's default
+    // alphabetical-ascending list order returns the OLDEST first. A single
+    // limit-N page silently hides the newest snapshots once the bucket holds
+    // more than N (the ingest pruner keeps ~120 live). Paginate via cursor so
+    // we always see the freshest write, then sort by uploadedAt desc.
+    const blobs = [];
+    let cursor;
+    do {
+      const page = await list({ prefix: snapshotPrefix, limit: 1000, cursor });
+      if (Array.isArray(page.blobs)) blobs.push(...page.blobs);
+      cursor = page.cursor;
+    } while (cursor);
+    const blob = blobs
       .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0];
     if (!blob?.url) {
       response.status(200).json(emptyState());
