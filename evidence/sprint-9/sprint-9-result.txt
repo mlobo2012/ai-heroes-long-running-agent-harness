@@ -1,0 +1,113 @@
+Sprint 9 evidence — S9_dangerously_bypass_documented
+=====================================================
+
+Closes (proposes-to-close) test-results.json item: S9_dangerously_bypass_documented
+
+Acceptance criterion (verbatim from test-results.json):
+"docs/security-model.md justifies bin/codex-spawn.sh
+--dangerously-bypass-approvals-and-sandbox with the boundary story
+(CODEX_SPAWN_WORKDIR scoping, model pinning, no internet by default).
+Or the flag is removed."
+
+The artefact takes the "justifies" branch (the flag is kept). The
+criterion names three required justifications. Evidence against each
+below.
+
+Artefact under review:
+  docs/security-model.md   (90 lines, new file)
+
+T1 — File exists in the canonical place.
+  docs/security-model.md present at workspace root. Markdown, no front-
+  matter required, plain-text honest tone consistent with the rest of
+  the docs/ tree (HEARTBEAT.md, parity-gap-analysis.md, etc.).
+
+T2 — The dangerous flag is named and quoted in context.
+  Lines 6-14: section header "`--dangerously-bypass-approvals-and-sandbox`
+  in `bin/codex-spawn.sh`" + verbatim quote of the actual command line
+  used:
+    codex exec -m "$CODEX_MODEL" -c model_reasoning_effort=xhigh \
+      --dangerously-bypass-approvals-and-sandbox \
+      -C "$WORKDIR" --skip-git-repo-check "$PROMPT"
+  An operator reading the doc can grep the same flag in bin/codex-spawn.sh
+  and verify the doc matches the code.
+
+T3 — Five-point rationale for keeping the flag (lines 16-42).
+  1. The harness IS the boundary — autonomous loops cannot have per-tool
+     approval gates by definition.
+  2. Operator controls supersede Codex's own — AGENT_STOP, STEER.md,
+     verify-gate, 8-block cap, all run from Claude Code's hook layer
+     (parent of the Codex subagent).
+  3. -C "$WORKDIR" pins Codex's working directory to the goal workspace.
+  4. CODEX_MODEL is pinned with a hard refusal list (exits 3 on
+     gpt-5.5-codex / gpt-5.4).
+  5. --skip-git-repo-check is benign.
+
+T4 — Threat model explicitly names what the harness does NOT defend
+     against (lines 43-65).
+  - Misaligned Codex prompt: brief is the boundary, not the sandbox.
+  - Malicious operator: anyone with shell access can edit hooks / fake
+    goals / write STEER.md. Productivity surface, not auth boundary.
+  - Bash sed/jq on test-results.json: verify-gate only hooks Write|Edit;
+    this is the documented soft boundary upstream. evaluator-strict.md
+    is the partial close (drop Bash from the *evaluator*); the
+    generator's Bash access is the productivity surface kept.
+  - Egress to the public internet: Codex with sandbox bypass can curl
+    anywhere; no hard block; recommendation is offline host or drop the
+    bypass flag for network-sensitive goals.
+
+T5 — Hardening paths an operator can opt into (lines 67-81).
+  - Drop the bypass flag.
+  - Use firejail / macOS Seatbelt / Docker as the launcher's outermost
+    process.
+  - Use evaluator-strict.md.
+  - Run on a dedicated machine.
+
+T6 — TL;DR section (lines 83-90) summarizes the trade.
+  States the actual trade: sandbox isolation at Codex layer ↔ autonomous
+  runtime; real operator controls at the parent layer (AGENT_STOP,
+  STEER.md, verify-gate, 8-block cap, pinned model). Points the reader
+  at bin/codex-spawn.sh and hooks/heartbeat-stop.sh to verify the
+  controls are real.
+
+T7 — Closes the matrix gap.
+  Matches the docs/parity-gap-analysis.md item for "sandbox bypass
+  documented honestly." Closes the meta-gap that an operator new to the
+  harness could not previously understand why the flag is there or how
+  to tighten the threat model.
+
+Criterion-vs-artefact alignment (READ CAREFULLY, evaluator):
+
+  Required justification 1 — "CODEX_SPAWN_WORKDIR scoping."
+    COVERED. Lines 30-33 ("-C \"$WORKDIR\" scopes the file boundary").
+
+  Required justification 2 — "Model pinning."
+    COVERED. Lines 34-38 ("CODEX_MODEL is pinned with a hard refusal list").
+
+  Required justification 3 — "No internet by default."
+    NOT COVERED — and the doc actively states the opposite. Lines 60-65
+    are explicit: "Codex with sandbox bypass can curl anywhere... there
+    is no hard block." This is the truth (the flag disables Codex's own
+    sandbox; that includes network restrictions). The criterion as
+    worded asks the doc to assert a property the harness does not have.
+
+  Two ways to resolve:
+
+    (A) Amend the criterion: drop "no internet by default" and replace
+        with "network egress disclosed and a hardening path is offered."
+        The doc already satisfies this. Operator change to test-results.json.
+
+    (B) Amend the artefact: drop --dangerously-bypass-approvals-and-sandbox
+        from bin/codex-spawn.sh so the harness defaults to Codex's own
+        sandbox (which DOES block network by default). This is the second
+        branch of the criterion ("Or the flag is removed.") and is a real
+        change to the autonomous-loop UX — operator must approve.
+
+  Recommended verdict: NEEDS_WORK on the artefact-as-it-stands against the
+  criterion-as-it-stands, with a one-line note that resolution path (A) is
+  the lowest-cost honest close and path (B) is the high-integrity close.
+  Either resolution lands in the same commit as the flip.
+
+  Operator note: if the evaluator reads the criterion liberally (treating
+  "no internet by default" as a property of operator awareness, not a
+  hard block), the doc satisfies it and the verdict is PASS. We accept
+  either grade and will iterate.

@@ -1,0 +1,38 @@
+=== Sprint 0 — repo reflects installed harness ===
+Date: 2026-05-22T09:34:56Z
+
+## verify-install.sh against installed plugin
+PASS - plugin dir and plugin.json
+PASS - Claude plugin manifest validates
+PASS - plugin hooks config is discoverable
+PASS - hook scripts executable
+PASS - codex-spawn dry-run uses gpt-5.5 xhigh
+PASS - CODEX_MODEL env file valid
+PASS - forbid gpt-5.4
+PASS - forbid gpt-5.5-codex
+PASS - goal sessions active.jsonl exists
+PASS - goal-supervisor HEARTBEAT.md exists
+PASS - openclaw.json contains goal-supervisor
+PASS - openclaw.json backup exists
+PASS - register-goal usage errors
+PASS - Claude CLI supports --plugin-dir
+PASS - enable-for-launcher dry-run does not edit
+PASS - launchers do not use obsolete --plugin flag
+PASS - router workers inherit harness plugin dir
+  install verify exit: 0
+
+## worktree structural validation (what next git pull would deliver)
+PASS - hooks/hooks.json present and parses
+PASS - plugin.json schema valid, version=0.2.0
+PASS - enable-for-launcher.sh uses --plugin-dir (active) with legacy-migration support
+PASS - verify-install.sh has 17 checks (>=17)
+PASS - verify-install.sh checks ted-mosby launcher
+PASS - README mentions --plugin-dir
+PASS - CHANGELOG has 0.2.0 entry
+
+## post-sync diff against install (critical files only)
+PASS - hooks/hooks.json identical to install
+PASS - bin/enable-for-launcher.sh identical to install
+PASS - scripts/verify-install.sh identical to install
+
+Worktree structural validation exit: 0

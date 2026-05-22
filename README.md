@@ -7,7 +7,7 @@ You give it a goal with a programmatic pass signal. The harness keeps Claude loo
 Built on top of Anthropic's published primitives ([Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), [Harness design for long-running application development](https://www.anthropic.com/engineering/harness-design-long-running-apps), and the reference repo [`anthropics/cwc-long-running-agents`](https://github.com/anthropics/cwc-long-running-agents)). This harness adds the two pieces those primitives leave out:
 
 1. **A stall detector** — the upstream loop is event-driven, so if events stop firing, nothing notices. This adds an outer 15-minute supervisor that catches the silence.
-2. **A pinned Codex executor** — a single env file controls which model your sprints run on. Bump one line when OpenAI ships a new model; no script chases versions.
+2. **A pinned Codex executor** — a single env file controls which model your sprints run on. Update one line when you choose a different supported model; no script chases versions.
 
 ---
 
@@ -29,7 +29,7 @@ The outer pulse only intervenes when state goes stale. It is the safety net, not
 ## How it works (first principles)
 
 ```
-T+0    You register a goal. The /goal overlay engages.
+T+0    You register a goal and paste the printed /goal command.
 T+0…   Claude loops. Every turn ends → inner pulse writes last-beat,
        checks test-results.json. If "passes": false anywhere → block,
        continue. If all true → goal met, exit cleanly.
@@ -39,7 +39,7 @@ T+15m  Outer pulse wakes. Reads last-beat = 2m old. Silent.
 T+30m  Outer pulse wakes. Last-beat still fresh. Silent.
 T+45m  Codex hangs. Outer pulse wakes, sees last-beat = 45m old.
        Posts a stall alert. Appends a recovery note to STEER.md.
-T+50m  Session unsticks (Anthropic's 10-min subagent timeout fires).
+T+50m  Session unsticks (for example, your runtime times out the subagent).
        Next turn ends → inner pulse reads STEER.md, resets the
        block counter, takes the recovery direction into account.
 T+2h   Goal met. test-results.json all green. Inner pulse exits cleanly.
@@ -53,6 +53,50 @@ Every goal needs a `test-results.json` in the agent's workspace. Every criterion
 
 This is the upstream cwc primitive. It is the entire reason this thing terminates honestly instead of optimistically.
 
+### Scope policies
+
+`test-results.json` may include a top-level `scope_policy` field:
+`fixed_scope`, `production_hardening`, or `research_only`. Missing means
+`fixed_scope`, which preserves the current behavior exactly.
+
+`production_hardening` adds an opt-in blocker ledger at
+`.claude/goal-state/blockers.jsonl`. Open blockers, and triaged blockers
+without evidence, block completion even when every planned row is green.
+`research_only` records blockers but never blocks on them.
+
+Read the user guide at [`docs/scope-policies.md`](./docs/scope-policies.md)
+and use [`docs/examples/production-hardening-prompt.md`](./docs/examples/production-hardening-prompt.md)
+as the reference brief shape for hardening runs.
+
+### Known soft boundary: Bash sed/jq on `test-results.json`
+
+`hooks/verify-gate.sh` is a `Write|Edit` hook. It blocks direct Claude Code `Write` and `Edit` operations on `test-results.json` until fresh evidence has been opened, and it binds passing flips to matching evidence paths, but it is not a shell sandbox.
+
+The exact bypass is a shell rewrite such as `bash -c 'sed -i "s/false/true/" test-results.json'`. Because that runs through Bash instead of `Write` or `Edit`, `verify-gate.sh` does not inspect it.
+
+The partial close is `agents/evaluator-strict.md`: the strict evaluator drops Bash from the evaluator's tool grant, which closes the grader-side sed/jq bypass. It does not close generator-side Bash access during normal engineering work.
+
+Recommended hardening path: add a second `PreToolUse` hook matching `Bash` that blocks commands matching `sed.*test-results\.json|jq.*test-results\.json`. Keep `verify-gate.sh` as the evidence gate, and use the Bash hook only for this results-file mutation surface.
+
+### Codex routing: soft boundary on the generator side
+
+Code-heavy sprint work goes through `codex-executor`, and therefore through `bin/codex-spawn.sh`. Orchestrator self-execution is reserved for read-only work, single-file changes, sub-10-minute fixes, or fully reversible operator-side edits.
+
+The routing signal is one of:
+
+- A fresh `.claude/goal-state/codex-spawn-*.log` written by `scripts/build-eval-loop.sh` or the `codex-executor` agent.
+- A `Co-Authored-By: codex` trailer on the most recent commit on the sprint branch.
+
+`hooks/verify-gate.sh` partially enforces this when a code-heavy `test-results.json` row flips and the changeset since the last commit touches `hooks/`, `scripts/`, `bin/`, or `agents/`. Enforcement is intentionally partial: it cannot prove every generator action came from Codex, and shell-level bypasses remain outside this hook. Operator discipline closes the rest: check for a fresh spawn log before accepting "generation done", and treat a missing log on a code-heavy sprint as orchestrator self-execution unless the latest commit carries the codex co-author trailer.
+
+### Strict evaluator for content goals
+
+`agents/evaluator-strict.md` is the strict-mode grader. Its tool grant is `Read, Glob, Grep` only: no Bash, no Write, no Edit.
+
+Use `agents/evaluator-strict.md` as the default grader for content-domain goals: writing, GEO articles, prose, and design QA. These goals usually do not need shell access, and their evaluation evidence can be prepared as readable artefacts before grading.
+
+Engineering goals can still use the default `agents/evaluator.md`, which has `Read, Glob, Grep, Bash` so it can inspect diffs and run lightweight checks. That path accepts the soft-Bash boundary described above.
+
 ### The operator controls
 
 | Control | Effect |
@@ -60,7 +104,81 @@ This is the upstream cwc primitive. It is the entire reason this thing terminate
 | `AGENT_STOP` file in the workspace | Kill switch. Next turn boundary → session stops, last commit captured. |
 | `STEER.md` with content | Operator steering. Next turn → Claude is interrupted with `OPERATOR STEERING: <your note>` and the block counter is reset. |
 | `.claude/goal-state/heartbeat-stop.log` | Audit trail of every decision the inner pulse made. |
+| `.claude/goal-state/sessions.jsonl` | One JSON line per completed, kill-switched, or anti-runaway-capped session. |
 | `~/.claude/goal-sessions/active.jsonl` | The outer pulse's source of truth for what's active. |
+
+### Benchmark snapshots
+
+The current benchmark snapshot is in [`docs/benchmarks.md`](./docs/benchmarks.md).
+It records stall-detection latency, this session's inner-pulse/Codex sprint
+wall-times, and evidence-gate enforcement counts. Regenerate the raw JSON with
+`scripts/benchmark-collect.sh`.
+
+### Discord notifications
+
+Live Discord notifications require `DISCORD_NOTIFY_WEBHOOK`. Without it, the script writes to the local log only.
+
+`hooks/discord-notify.sh` posts only on non-running state changes: sprint pass or goal complete. It always appends the local state-change line to `.claude/goal-state/discord-notify.log`. On goal complete, it best-effort reads the matching Claude Code session JSONL under `~/.claude/projects/*/<session-id>.jsonl` and appends input/output/cache token totals plus an estimated USD cost. When `DISCORD_NOTIFY_WEBHOOK` is set, failed webhook POSTs are retried with exponential backoff and then written to `.claude/goal-state/discord-notify-deadletter.log`.
+
+| Variable / path | Purpose |
+|---|---|
+| `DISCORD_NOTIFY_WEBHOOK` | Enables live Discord webhook POSTs. If unset, no network call is attempted. |
+| `DISCORD_NOTIFY_MAX_ATTEMPTS` | Optional curl attempt count before dead-letter; default `3`. |
+| `DISCORD_NOTIFY_TIMEOUT` | Optional curl `--max-time` in seconds; default `10`. |
+| `.claude/goal-state/discord-notify-deadletter.log` | Dead-letter log for payloads that still fail after all attempts. |
+
+---
+
+## Capabilities and where they are tested
+
+Every operational claim below is either covered by an integration test under
+`tests/`, checked by `scripts/verify-install.sh`, or explicitly scoped as a
+soft boundary.
+
+| Capability statement | Verification |
+|---|---|
+| The Default-FAIL loop blocks while any result row contains `"passes": false`. | `tests/cap/eight-block-cap.sh`; `scripts/verify-install.sh --scope core` checks hook wiring/executability. |
+| Direct `Write`/`Edit` flips of `test-results.json` require fresh, matching evidence. | `tests/scope-policy/evidence-gating-still-works.sh`; sprint evidence `S3_verify_gate_per_row_evidence_binding`. Bash rewrites remain the documented soft boundary. |
+| `SubagentStop` writes heartbeat state without consuming the 8-block cap. | `tests/cap/eight-block-cap.sh`; sprint evidence `D2_subagentstop_does_not_eat_block_counter`. |
+| `STEER.md` can interrupt a run and reset the block counter. | `tests/user-prompt-submit/steer-surfacing.sh`; `S5_steer_counter_reset_marker` evidence. |
+| The OpenClaw outer pulse can detect stale sessions and trim completed sessions when setup is enabled. | `tests/outer-pulse/stall-detection.sh`, `tests/outer-pulse/completion-trim.sh`, and `tests/soak/soak.sh`. OpenClaw itself remains optional setup. |
+| Discord notifications retry, dead-letter failed webhook payloads, and add best-effort cost telemetry on goal completion. | `tests/discord-notify/retry-deadletter.sh` and `tests/discord-notify/cost-telemetry.sh`. |
+| Codex execution uses the pinned `CODEX_MODEL` env and refuses known-bad model values. | `scripts/verify-install.sh --scope core` checks the dry-run command and forbidden-model exits. |
+| Code-heavy Codex provenance is partially enforced before result flips. | Sprint evidence `S6_generator_routes_through_codex_enforced`; this remains partial because shell-level bypasses are outside `verify-gate.sh`. |
+| `fixed_scope`, `production_hardening`, and `research_only` completion policies are supported. | `tests/scope-policy/*.sh`; `scripts/verify-install.sh --scope core` checks docs, scripts, and enum handling. |
+| A fresh workspace can be seeded without clobbering existing files. | `tests/init-workspace/seed.sh`; `scripts/verify-install.sh --scope core`. |
+| Terminal sessions append a best-effort machine-readable session ledger. | `tests/session-ledger/append-on-stop.sh`; `scripts/verify-install.sh --scope core`. |
+| Rubric files exist for strict subjective evaluation. | `scripts/verify-install.sh --scope core` checks the template, GEO example, and strict-evaluator rubric contract. |
+| Benchmark snapshots and collectors are present. | `tests/benchmarks/benchmark-collect.sh`; `scripts/verify-install.sh --scope core`. |
+| Launcher edits and goal registration have documented rollback paths. | `scripts/verify-install.sh --scope core` checks the README Reversibility section. |
+| The repo-to-install copy is deterministic before release publication. | `scripts/sync-to-install.sh`; `scripts/verify-install.sh --scope core`; the release diff command in the next section. |
+
+Not enforced in this plugin: automatic sprint-contract negotiation, automatic
+context clearing, browser/MCP evaluation, Agent SDK translation, and unattended
+launcher restart. Those decisions are tracked in
+[`docs/parity-decisions.md`](./docs/parity-decisions.md).
+
+---
+
+## Publishing sync
+
+Before publishing or evaluating a release from a workspace, sync the functional
+package files into the installed plugin and verify no functional drift remains:
+
+```bash
+bash scripts/sync-to-install.sh
+diff -rq /Users/marco/conductor/workspaces/klaus/dubai-5 /Users/marco/.claude/plugins/discord-long-running-harness \
+  | grep -vE '\.claude/goal-state|evidence/|test-results\.json|PROGRESS\.md|STEER\.md|tests/|\.git/|node_modules' \
+  || true
+```
+
+The sync copies `hooks/`, `scripts/`, `agents/`, `bin/`, `docs/`,
+`.claude-plugin/plugin.json`, `README.md`, `CHANGELOG.md`, `CLAUDE.md`,
+`LICENSE`, `SYNC.md`, and `.gitignore` as package files. It does not copy
+evidence or test contents as plugin payload; it creates empty comparison
+scaffolding for excluded directories so the prescribed `diff -rq | grep -vE`
+release check filters nested workspace-only paths instead of top-level
+directory names.
 
 ---
 
@@ -94,7 +212,21 @@ Enable it on a launcher (or any `claude` invocation). The included helper does t
 "$HOME/.claude/plugins/discord-long-running-harness/bin/enable-for-launcher.sh" --slug klaus --apply
 ```
 
-Or just add `--plugin discord-long-running-harness` to your own `claude` command.
+This helper targets Claude Code builds where local plugins are loaded with
+`--plugin-dir <path>`; `scripts/verify-install.sh --scope core` checks that
+your local CLI advertises that flag. The legacy `--plugin <name>` form is not
+used by this harness and the helper will refuse to write it. For
+Discord-router launchers (`plugin:discord-router@claude-discord-threads`), the
+helper also threads `DISCORD_WORKER_PLUGIN_DIRS` through so spawned workers
+inherit the same plugin directory.
+
+If you wire it by hand instead of the helper:
+
+```bash
+exec claude \
+  --plugin-dir "$HOME/.claude/plugins/discord-long-running-harness" \
+  # ...your other flags
+```
 
 ### Pin the Codex model
 
@@ -106,23 +238,89 @@ CODEX_MODEL=gpt-5.5
 ENV
 ```
 
-When OpenAI ships GPT-5.6 or GPT-6, edit that one line. No restart needed — every spawn re-reads it.
+When you move to a new supported Codex model, edit that one line. No restart needed — every spawn re-reads it.
 
 The executor refuses `gpt-5.5-codex` (rejected under ChatGPT-account auth) and `gpt-5.4` (silent default that would otherwise get used if you forget). Both fail loud with exit codes 3 and 4.
 
 ### Confirm the install
 
 ```bash
+# Universal checks — should pass on any properly-installed harness:
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh" --scope core
+
+# Add OpenClaw outer pulse + Discord-router launcher checks (AI Heroes layout):
+"$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh" --scope setup
+
+# Both (default, 34 checks total):
 "$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh"
 ```
 
-13 PASS checks, exit 0. If any FAIL, fix before going live.
+Exit 0 on success. `--scope core` is the right command for community installs
+and CI; `--scope setup` is for the OpenClaw + Discord-launcher layout AI Heroes
+uses. `--scope all` (default) runs both groups.
+
+Core checks (28): plugin dir + `.claude-plugin/plugin.json`,
+`claude plugin validate` schema pass, `hooks/hooks.json` is discoverable
+and every required hook command resolves under `${CLAUDE_PLUGIN_ROOT}`,
+every hook script is executable, `codex-spawn.sh --dry-run` emits
+`-m gpt-5.5 -c model_reasoning_effort=xhigh`, the pinned `CODEX_MODEL` env
+file is readable and not forbidden, `gpt-5.4` and `gpt-5.5-codex` both
+fail loud with exit 3, the active-sessions ledger exists,
+`register-goal.sh --help` errors with usage, `claude --help`
+advertises `--plugin-dir`, the supervisor runner is executable, and the
+outer-pulse fixture tests are present. Rubric, reversibility, and synthetic
+soak checks verify the strict evaluator rubric files, README rollback docs,
+and `tests/soak/soak.sh`. Scope-policy checks validate the
+optional enumerated `scope_policy` field, blocker ledger scripts, lifecycle
+tests, docs, the benchmarks snapshot, and the benchmark collector executable.
+Bootstrap checks also verify `scripts/init-workspace.sh`, the optional
+`agents/planner.md`, and the `sessions.jsonl` write path in
+`hooks/heartbeat-stop.sh`. Final-gate checks verify
+`docs/parity-decisions.md`, `scripts/sync-to-install.sh`, and the README
+capability map/audit script.
+
+Setup checks (6, require AI Heroes layout): OpenClaw supervisor
+`HEARTBEAT.md` exists, `openclaw.json` lists `goal-supervisor`, a
+timestamped `openclaw.json.bak.pre-goal-supervisor.*` backup exists,
+`enable-for-launcher.sh --dry-run` does not edit the launcher and would
+write `--plugin-dir`, no launcher (`klaus`, `richard`, `ted-mosby`) uses
+the obsolete `--plugin` flag, and the Discord-router launcher threads
+`DISCORD_WORKER_PLUGIN_DIRS` through to spawned workers.
 
 ### Optional: enable the outer pulse (OpenClaw)
 
-If you run OpenClaw, add a `goal-supervisor` agent with a 15-minute heartbeat. The repo includes a reference `HEARTBEAT.md` and the openclaw.json shape under [`docs/openclaw-supervisor/`](./docs/openclaw-supervisor/) (added during initial install — see the install report for the exact JSON entry that was merged).
+If you run OpenClaw, add a `goal-supervisor` agent with a 15-minute heartbeat. The repo ships a complete reference under [`docs/openclaw-supervisor/`](./docs/openclaw-supervisor/):
 
-Without OpenClaw the harness still runs — you just lose stall detection. The inner pulse, Default-FAIL contract, kill switch, steering, and pinned Codex executor all work standalone.
+- `HEARTBEAT.md` — the supervisor's behavior contract (active session scan, 20-min stall threshold, Discord alert + STEER.md recovery note, atomic ledger trim on completion). Copy to `~/.openclaw/workspace-goal-supervisor/HEARTBEAT.md`.
+- `openclaw.json.example` — the agent entry to merge into your `~/.openclaw/openclaw.json` `agents.list` array (id `goal-supervisor`, `heartbeat.every: 15m`, Codex GPT-5.5 with `thinkingDefault: high`).
+- `workspace-README.md` — the short README that lives inside the supervisor workspace. Copy as `README.md`.
+
+The runnable protocol fixture is [`scripts/supervisor-runner.sh`](./scripts/supervisor-runner.sh), which supports synthetic ledgers and logs for CI-safe outer-pulse tests without touching the live OpenClaw setup.
+
+```bash
+mkdir -p ~/.openclaw/workspace-goal-supervisor/state
+cp docs/openclaw-supervisor/HEARTBEAT.md ~/.openclaw/workspace-goal-supervisor/HEARTBEAT.md
+cp docs/openclaw-supervisor/workspace-README.md ~/.openclaw/workspace-goal-supervisor/README.md
+cp ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.bak.pre-goal-supervisor.$(date +%Y%m%dT%H%M%SZ)
+# Manually merge docs/openclaw-supervisor/openclaw.json.example into agents.list.
+scripts/verify-install.sh --scope setup    # exits 0 once wired
+```
+
+Without OpenClaw the harness still runs — you just lose stall detection. The inner pulse, Default-FAIL contract, kill switch, steering, and pinned Codex executor all work standalone. Use `scripts/verify-install.sh --scope core` to confirm a community-friendly install.
+
+---
+
+## Bootstrap a workspace
+
+Use [`scripts/init-workspace.sh`](./scripts/init-workspace.sh) to seed a fresh workspace with the long-running goal skeleton:
+
+```bash
+scripts/init-workspace.sh "$HOME/path/to/workspace"
+```
+
+It creates `PROGRESS.md`, `test-results.json`, `STEER.md`, and `.claude/goal-state/block-count` without clobbering existing files. If the target is a clean git worktree, it commits only those seed files with `init: seed workspace for long-running goal`.
+
+For live monitoring, see [`docs/observability.md`](./docs/observability.md) for the four-pane `watch -n 2` and `tail -F` layout.
 
 ---
 
@@ -214,14 +412,18 @@ Small enough to land in 2–3 sprints. Exercises every part of the harness end-t
 ## Components
 
 ```
-.claude-plugin/plugin.json               # Plugin manifest
+.claude-plugin/plugin.json               # Plugin manifest (canonical Claude Code shape)
 CLAUDE.md                                # Session instructions ("Discord is your operator console")
-settings.json                            # Hook wiring
+hooks/hooks.json                         # Canonical hook wiring (loaded by --plugin-dir)
 agents/
-  evaluator.md                           # Fresh-context grader (vendored from cwc; Read/Glob/Grep/Bash only, no Write)
+  evaluator.md                           # Fresh-context grader (vendored from cwc; Read/Glob/Grep/Bash, no Write/Edit)
+  evaluator-strict.md                    # Strict content grader (Read/Glob/Grep only; no Bash/Write/Edit)
   codex-executor.md                      # Sprint executor — invokes bin/codex-spawn.sh
+  planner.md                             # Optional one-line-goal to BUILD_PLAN.md planner
+  rubrics/                               # Optional strict-evaluator rubric template + examples
 hooks/
-  heartbeat-stop.sh                      # Inner pulse — Stop + SubagentStop
+  user-prompt-submit.sh                  # UserPromptSubmit — surfaces STEER.md as additional context
+  heartbeat-stop.sh                      # Inner pulse — Stop + SubagentStop; ignores SubagentStop for block counting
   track-read.sh                          # PreToolUse(Read) — records evidence opens
   verify-gate.sh                         # PreToolUse(Write|Edit) — Default-FAIL contract
   kill-switch.sh                         # PreToolUse(*) — AGENT_STOP halts everything
@@ -230,27 +432,43 @@ hooks/
   discord-notify.sh                      # Stop — channel notification on state change
 bin/
   codex-spawn.sh                         # Reads pinned CODEX_MODEL, invokes codex exec
-  enable-for-launcher.sh                 # Safe rollout helper (dry-run by default)
+  enable-for-launcher.sh                 # Safe rollout helper (dry-run by default, --plugin-dir aware)
 scripts/
+  init-workspace.sh                      # Seeds PROGRESS.md, test-results.json, STEER.md, goal-state, and initial commit
   register-goal.sh                       # Registers an active goal session
-  verify-install.sh                      # 13 PASS checks
+  blocker-record.sh                      # Appends open production blockers to .claude/goal-state/blockers.jsonl
+  blocker-update.sh                      # Appends latest-wins blocker status updates
+  benchmark-collect.sh                   # Emits JSON for docs/benchmarks.md
+  sync-to-install.sh                     # Mirrors package files into the installed plugin
+  audit-readme.sh                        # Checks capability map and local README links
+  verify-install.sh                      # 28 core checks + 6 setup checks; --scope core|setup|all
+docs/
+  benchmarks.md                          # Current stall, throughput, and evidence-gate benchmark snapshot
+  observability.md                       # tmux/watch panel set for live goal monitoring
+  parity-gap-analysis.md                 # Primitive-by-primitive matrix vs anthropics/cwc-long-running-agents
+  parity-decisions.md                    # Current closed/deferred parity rollup for release gates
+  scope-policies.md                      # fixed_scope, production_hardening, research_only guide
+  examples/production-hardening-prompt.md # Reference production-hardening sprint brief
+  openclaw-supervisor/                   # Optional outer pulse — HEARTBEAT.md + openclaw.json.example + READMEs
 ```
+
+`hooks/user-prompt-submit.sh` runs on `UserPromptSubmit`. When `STEER.md` exists and is non-empty, it emits the current steering note as hook additional context, capped at 8KB with a truncation note.
 
 ---
 
 ## Troubleshooting
 
 **The inner pulse isn't firing.**
-Confirm the plugin is loaded: in your session, the `Stop` and `SubagentStop` hooks in `settings.json` should reference `discord-long-running-harness`. If you launched without `--plugin discord-long-running-harness`, restart.
+Confirm the plugin is loaded: in your session, the `Stop` and `SubagentStop` hooks in `hooks/hooks.json` should reference `${CLAUDE_PLUGIN_ROOT}/hooks/heartbeat-stop.sh`. If you launched without `--plugin-dir <plugin-path>`, restart. This harness does not use the legacy `--plugin <name>` form.
 
 **The goal never terminates.**
 Your `test-results.json` probably has no items, or every item is structured in a way `grep -q '"passes": false'` can't find. Open the file and check the structure matches `{ "items": [ { "passes": false, ... }, ... ] }` or any JSON that contains literal `"passes": false` strings until the goal is met.
 
 **Codex refuses to spawn.**
-Check `$HOME/.claude/codex-current-model.env`. Exit code 2 = file missing. Exit code 3 = forbidden model (`gpt-5.5-codex` or `gpt-5.4`). Exit code 4 = `CODEX_MODEL` not set.
+Check `$HOME/.claude/codex-current-model.env`. Exit code 2 = file missing. Exit code 3 = forbidden model (`gpt-5.5-codex` or `gpt-5.4`). Exit code 4 = `CODEX_MODEL` not set. Exit code 5 = empty sprint prompt passed to `codex-spawn.sh`.
 
 **The 8-block cap fired.**
-The inner pulse respects Anthropic's platform cap. After 8 consecutive blocks, the next turn is allowed to end. This is by design — don't fight it. Either (a) the goal is poorly specified, (b) the agent is making no progress (check `heartbeat-stop.log`), or (c) you need to `STEER.md` it in a different direction.
+The inner pulse enforces an anti-runaway cap: after 8 consecutive `goal-not-met` blocks on real turn boundaries (`Stop` events — `SubagentStop` events do not count toward the cap as of 0.3.0), the next turn is allowed to end. This is by design — don't fight it. Either (a) the goal is poorly specified, (b) the agent is making no progress (check `heartbeat-stop.log`), or (c) you need to `STEER.md` it in a different direction. Steering also resets the counter via a one-shot `.claude/goal-state/steered-this-turn` marker that survives the hook-ordering race in upstream `steer.sh`.
 
 **The outer pulse never alerts.**
 You don't have OpenClaw installed, or `goal-supervisor` isn't in `~/.openclaw/openclaw.json`. The inner pulse works fine without it; you just lose stall detection.
@@ -259,23 +477,124 @@ You don't have OpenClaw installed, or `goal-supervisor` isn't in `~/.openclaw/op
 
 ## Reversibility
 
+Scripts that edit existing state write a timestamped backup before the edit.
+Manual setup commands are listed here too so every modification path has a
+rollback path.
+
+### Plugin checkout
+
 ```bash
 # Remove the plugin:
 rm -rf "$HOME/.claude/plugins/discord-long-running-harness"
-
-# Remove the pinned model env:
-rm -f "$HOME/.claude/codex-current-model.env"
-
-# Remove the active sessions ledger:
-rm -rf "$HOME/.claude/goal-sessions"
-
-# OpenClaw supervisor (if you set it up):
-# restore openclaw.json from your timestamped backup
-# rm -rf "$HOME/.openclaw/workspace-goal-supervisor"
-# rm -rf "$HOME/.openclaw/agents/goal-supervisor"
 ```
 
-Every install operation backs up before edit. Every script is reversible.
+Rollback: reclone the repo, or restore the plugin directory from your own
+filesystem backup if you had local changes.
+
+### Workspace-to-install sync
+
+`scripts/sync-to-install.sh` mirrors package files from the current checkout to
+`$HOME/.claude/plugins/discord-long-running-harness` or `HARNESS_INSTALL_DIR`.
+It overwrites the installed copy of functional files and prunes retired
+package files from that install directory.
+
+Rollback: run the same script from the previous release checkout, reclone the
+plugin at the desired tag, or restore the plugin directory from your filesystem
+backup.
+
+### Pinned Codex model env
+
+```bash
+# Remove the pinned model env created during install:
+rm -f "$HOME/.claude/codex-current-model.env"
+```
+
+Rollback: restore your previous env file if you overwrote one, or remove the
+file if the harness created it for the first time.
+
+### Launcher helper
+
+`bin/enable-for-launcher.sh --apply` edits:
+
+- `$HOME/.claude/channels/discord/start-<slug>.sh`
+
+Before replacing the launcher it writes:
+
+- `$HOME/.claude/channels/discord/start-<slug>.sh.bak.<ts>.enable-for-launcher`
+
+Rollback:
+
+```bash
+mv "$HOME/.claude/channels/discord/start-<slug>.sh.bak.<ts>.enable-for-launcher" \
+  "$HOME/.claude/channels/discord/start-<slug>.sh"
+chmod +x "$HOME/.claude/channels/discord/start-<slug>.sh"
+```
+
+### Goal registration
+
+`scripts/register-goal.sh` edits:
+
+- `$HOME/.claude/goal-sessions/active.jsonl`
+- `<workspace>/.claude/goal-state/goal-state.json`
+
+Before writing, it creates:
+
+- `$HOME/.claude/goal-sessions/active.jsonl.bak.<ts>.register-goal`
+- `<workspace>/.claude/goal-state/goal-state.json.bak.<ts>.register-goal`
+
+Rollback:
+
+```bash
+mv "$HOME/.claude/goal-sessions/active.jsonl.bak.<ts>.register-goal" \
+  "$HOME/.claude/goal-sessions/active.jsonl"
+mv "<workspace>/.claude/goal-state/goal-state.json.bak.<ts>.register-goal" \
+  "<workspace>/.claude/goal-state/goal-state.json"
+```
+
+To remove all registered sessions instead:
+
+```bash
+rm -rf "$HOME/.claude/goal-sessions"
+```
+
+### Supervisor runner
+
+`scripts/supervisor-runner.sh` may edit:
+
+- `$HOME/.claude/goal-sessions/active.jsonl` when completed sessions are trimmed.
+- `$HOME/.claude/goal-sessions/recovery.log` when stalled sessions are recorded.
+- `$HOME/.claude/goal-sessions/completion.log` when completed sessions are recorded.
+
+Environment overrides such as `SUPERVISOR_ACTIVE_LEDGER`,
+`SUPERVISOR_RECOVERY_LOG`, and `SUPERVISOR_COMPLETION_LOG` move those write
+paths for tests or custom installs. Before each file's first write in a run,
+the runner creates `<path>.bak.<ts>.supervisor-runner`.
+
+Rollback:
+
+```bash
+mv "$HOME/.claude/goal-sessions/active.jsonl.bak.<ts>.supervisor-runner" \
+  "$HOME/.claude/goal-sessions/active.jsonl"
+mv "$HOME/.claude/goal-sessions/recovery.log.bak.<ts>.supervisor-runner" \
+  "$HOME/.claude/goal-sessions/recovery.log"
+mv "$HOME/.claude/goal-sessions/completion.log.bak.<ts>.supervisor-runner" \
+  "$HOME/.claude/goal-sessions/completion.log"
+```
+
+A Discord webhook alert, if configured, is external and cannot be rolled back;
+the local ledger and logs remain restorable.
+
+### OpenClaw supervisor
+
+The README setup command already backs up `~/.openclaw/openclaw.json` before
+you merge the `goal-supervisor` entry:
+
+```bash
+mv "$HOME/.openclaw/openclaw.json.bak.pre-goal-supervisor.<ts>" \
+  "$HOME/.openclaw/openclaw.json"
+rm -rf "$HOME/.openclaw/workspace-goal-supervisor"
+rm -rf "$HOME/.openclaw/agents/goal-supervisor"
+```
 
 ---
 

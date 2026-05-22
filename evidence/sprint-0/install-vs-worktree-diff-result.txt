@@ -1,0 +1,20 @@
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: .claude
+Files /Users/marco/conductor/workspaces/klaus/dubai-5/.claude-plugin/plugin.json and /Users/marco/.claude/plugins/discord-long-running-harness/.claude-plugin/plugin.json differ
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: CHANGELOG.md
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: LICENSE
+Files /Users/marco/conductor/workspaces/klaus/dubai-5/README.md and /Users/marco/.claude/plugins/discord-long-running-harness/README.md differ
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: SYNC.md
+Files /Users/marco/conductor/workspaces/klaus/dubai-5/bin/enable-for-launcher.sh and /Users/marco/.claude/plugins/discord-long-running-harness/bin/enable-for-launcher.sh differ
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: docs
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: evidence
+Only in /Users/marco/.claude/plugins/discord-long-running-harness/hooks: hooks.json
+Files /Users/marco/conductor/workspaces/klaus/dubai-5/scripts/verify-install.sh and /Users/marco/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh differ
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: settings.json
+Only in /Users/marco/conductor/workspaces/klaus/dubai-5: tests
+
+--- verify-install.sh line count ---
+worktree:      132 lines
+install:       192 lines
+
+--- new files in install not in worktree ---
+hooks/hooks.json

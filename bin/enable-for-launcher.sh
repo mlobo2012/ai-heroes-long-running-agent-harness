@@ -7,6 +7,9 @@ usage() {
 Usage: enable-for-launcher.sh --slug <klaus|richard|...> [--dry-run] [--apply]
 
 Default is dry-run. Use --apply to edit the launcher after reviewing the diff.
+
+This helper targets Claude Code 2.1.x, where local plugins are loaded with
+--plugin-dir <path>. Do not use the obsolete --plugin <name> form.
 USAGE
 }
 
@@ -45,40 +48,72 @@ if [ -z "$SLUG" ]; then
 fi
 
 LAUNCHER="$HOME/.claude/channels/discord/start-${SLUG}.sh"
+PLUGIN_DIR="$HOME/.claude/plugins/discord-long-running-harness"
 if [ ! -f "$LAUNCHER" ]; then
   echo "enable-for-launcher: missing launcher $LAUNCHER" >&2
   exit 3
 fi
+if [ ! -d "$PLUGIN_DIR" ]; then
+  echo "enable-for-launcher: missing plugin dir $PLUGIN_DIR" >&2
+  exit 3
+fi
 
-if grep -q -- '--plugin[[:space:]]\+discord-long-running-harness' "$LAUNCHER"; then
-  echo "Launcher already includes --plugin discord-long-running-harness: $LAUNCHER"
+if grep -Eq -- '--plugin-dir[[:space:]]+[^[:space:]]*discord-long-running-harness' "$LAUNCHER" \
+  && { ! grep -q -- 'plugin:discord-router@claude-discord-threads' "$LAUNCHER" \
+    || grep -Eq -- 'DISCORD_WORKER_PLUGIN_DIRS=[^[:space:]]*discord-long-running-harness' "$LAUNCHER"; }; then
+  echo "Launcher already includes --plugin-dir for discord-long-running-harness: $LAUNCHER"
   exit 0
 fi
 
 make_proposed() {
-  python3 - "$LAUNCHER" <<'PY'
+  python3 - "$LAUNCHER" "$PLUGIN_DIR" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
+plugin_dir = str(Path(sys.argv[2]).expanduser().resolve())
 text = path.read_text()
-plugin = "--plugin discord-long-running-harness"
+plugin_flag = f"--plugin-dir {plugin_dir}"
 
-if plugin in text:
-    sys.stdout.write(text)
+def with_router_worker_env(value: str) -> str:
+    if "plugin:discord-router@claude-discord-threads" not in value:
+        return value
+    if "DISCORD_WORKER_PLUGIN_DIRS" in value:
+        return value
+    updated = value.replace(
+        'exec env DISCORD_STATE_DIR="$STATE_DIR" claude',
+        f'exec env DISCORD_STATE_DIR="$STATE_DIR" DISCORD_WORKER_PLUGIN_DIRS={plugin_dir} claude',
+        1,
+    )
+    if updated != value:
+        return updated
+    return re.sub(
+        r"(exec env\s+DISCORD_STATE_DIR=(?:(?:\"\\$STATE_DIR\")|(?:\\S+)))\s+claude",
+        rf"\1 DISCORD_WORKER_PLUGIN_DIRS={plugin_dir} claude",
+        value,
+        count=1,
+    )
+
+if re.search(r"--plugin-dir\s+\S*discord-long-running-harness", text):
+    sys.stdout.write(with_router_worker_env(text))
+    raise SystemExit(0)
+
+legacy = "--plugin discord-long-running-harness"
+if legacy in text:
+    sys.stdout.write(with_router_worker_env(text.replace(legacy, plugin_flag)))
     raise SystemExit(0)
 
 patterns = [
-    (r"claude \\\n", "claude \\\n      --plugin discord-long-running-harness \\\n", 1),
-    (r" claude --", " claude --plugin discord-long-running-harness --", 1),
-    (r" exec claude ", " exec claude --plugin discord-long-running-harness ", 1),
+    (r"claude \\\n", f"claude \\\n      {plugin_flag} \\\n", 1),
+    (r" claude --", f" claude {plugin_flag} --", 1),
+    (r" exec claude ", f" exec claude {plugin_flag} ", 1),
 ]
 
 for pattern, replacement, count in patterns:
     updated, n = re.subn(pattern, replacement, text, count=count)
     if n:
-        sys.stdout.write(updated)
+        sys.stdout.write(with_router_worker_env(updated))
         raise SystemExit(0)
 
 raise SystemExit("could not find claude invocation to patch")
@@ -100,8 +135,8 @@ if [ "$APPLY" -ne 1 ]; then
   exit 0
 fi
 
-timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-backup="${LAUNCHER}.bak.pre-harness.${timestamp}"
+timestamp="$(date +%s)"
+backup="${LAUNCHER}.bak.${timestamp}.enable-for-launcher"
 cp -p "$LAUNCHER" "$backup"
 tmp="${LAUNCHER}.tmp.pre-harness.${timestamp}"
 cp "$PROPOSED_FILE" "$tmp"

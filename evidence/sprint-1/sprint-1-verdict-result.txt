@@ -1,0 +1,20 @@
+PASS
+2026-05-22T09:40Z — evaluator agent (subagent_id a68cdb631ecd06db0), fresh-context grade of Sprint 1.
+
+Spec: S1_parity_matrix_complete — docs/parity-gap-analysis.md exists, classifies every upstream primitive, reviewed by evaluator agent.
+
+Evidence verified:
+- docs/parity-gap-analysis.md: 37 rows in primitive matrix (exceeds 30-row minimum), each classified ✅/⚠️/❌/➕.
+- All 5 cwc-vendored hooks (kill-switch, steer, track-read, verify-gate, commit-on-stop) addressed.
+- Distinctive primitives addressed: sprint contracts (rows 14, 22), generator/evaluator (row 9), initializer (row 19), planner (row 25), browser-MCP evaluator (row 23), context resets (row 26).
+- Section B: 10 article recommendations not in code.
+- Section C: 10 performance angles with quantitative metrics.
+- Section D: 14 traps with file:line refs.
+- Section E: 16-sprint plan with pass signals.
+
+Spot-checks:
+- agents/evaluator.md line 4 reads "tools: Read, Glob, Grep, Bash" (confirms byte-identical to upstream claim).
+- hooks/heartbeat-stop.sh lines 88-95 distinguish SubagentStop from Stop (D2 fix confirmed live).
+- docs/ contains only parity-gap-analysis.md (no openclaw-supervisor/ subdir, confirms D11 trap).
+
+Tool uses: 6. Duration: 33s.

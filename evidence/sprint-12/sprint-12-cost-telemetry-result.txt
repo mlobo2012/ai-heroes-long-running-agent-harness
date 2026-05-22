@@ -1,0 +1,50 @@
+Acceptance criterion verbatim:
+S12_cost_telemetry:
+- `hooks/discord-notify.sh` on goal-complete (when `results_count $RESULTS false == 0`), parses the most recent `~/.claude/projects/<id>/<session>.jsonl` and extracts:
+  - Total input tokens, output tokens (and any cache_read / cache_creation tokens if present).
+  - An estimated USD cost using Anthropic's pricing table (current pricing: claude-opus-4-7 ~$15/MTok input, $75/MTok output; cache_creation ~$18.75/MTok; cache_read ~$1.50/MTok — feel free to use whatever pricing constants are reasonable, document them inline).
+- The Discord payload (when webhook configured) includes the token + cost fields.
+- Behaviour is best-effort: if the session log can't be found or parsed, fail soft, log a warning, do NOT crash the hook.
+- Unit test in `tests/discord-notify/cost-telemetry.sh` with a synthetic session-log fixture confirms tokens + cost land in the payload.
+
+File-and-line citations:
+- hooks/discord-notify.sh:49-64 defines the best-effort cost telemetry helper and inline claude-opus-4-7 pricing comment.
+- hooks/discord-notify.sh:74-77 defines $15/$75/$18.75/$1.50 per-MTok pricing constants.
+- hooks/discord-notify.sh:98-107 selects the most recent non-empty `~/.claude/projects/*/<session-id>.jsonl` candidate.
+- hooks/discord-notify.sh:121-149 sums input, output, cache-creation, and cache-read tokens and estimates cost.
+- hooks/discord-notify.sh:152-162 formats the token and estimated-cost fields for the message.
+- hooks/discord-notify.sh:227-236 gates telemetry on `goal-complete` and logs an unavailable marker without crashing when telemetry is unavailable.
+- tests/discord-notify/cost-telemetry.sh:47-50 creates a synthetic session-log fixture.
+- tests/discord-notify/cost-telemetry.sh:52-66 invokes the hook with a goal-complete payload and asserts input/output/cache token totals plus estimated cost in the payload.
+- README.md:120 documents goal-complete cost telemetry behavior.
+
+T1 spot-check:
+Command: bash -n hooks/discord-notify.sh && bash tests/discord-notify/cost-telemetry.sh
+Output:
+PASS discord-notify cost telemetry
+
+T2 spot-check:
+Command: bash -n tests/discord-notify/cost-telemetry.sh
+Output: exit 0.
+
+T3 spot-check:
+Command: for t in tests/cap/*.sh tests/user-prompt-submit/*.sh tests/discord-notify/*.sh tests/scope-policy/*.sh tests/outer-pulse/*.sh; do bash "$t"; done
+Output:
+PASS eight-block anti-runaway cap
+PASS user-prompt-submit STEER surfacing
+PASS discord-notify cost telemetry
+PASS discord-notify retry and dead-letter
+PASS - verify-gate row binding still works
+PASS - fixed_scope missing field preserves existing completion behavior
+PASS - production_hardening completes when blockers are resolved with evidence
+PASS - production_hardening blocks on open blockers
+PASS - production_hardening blocks on triaged blockers without evidence
+PASS - research_only records blockers but does not block completion
+PASS - outer pulse completion trim
+PASS - outer pulse stall detection
+
+T4 spot-check:
+Command: scripts/verify-install.sh --scope all
+Output: exit 0 with 19 core PASS checks and 6 setup PASS checks, including "benchmark docs present" and "benchmark collector executable".
+
+Self-grade: PASS.

@@ -17,6 +17,8 @@ Do the following every time:
 
 Plausibility is not correctness. A diff that looks reasonable paired with a screenshot that shows a broken layout is NEEDS_WORK. Missing evidence for any acceptance criterion is NEEDS_WORK. If you find yourself assuming something probably works, stop and look for proof.
 
+Before returning PASS, if `test-results.json` declares `scope_policy: production_hardening`, read `.claude/goal-state/blockers.jsonl` and confirm zero latest blocker records are `open` or `triaged` with no `evidence_paths`. If any such records exist, return NEEDS_WORK and surface the blocker IDs so the builder can resolve, evidence, or explicitly update them.
+
 Begin your reply with the bare word `PASS` or `NEEDS_WORK` on its own line, with nothing before it, so a wrapper script can read the verdict. Then:
 
 - `PASS`: one line stating what evidence convinced you.

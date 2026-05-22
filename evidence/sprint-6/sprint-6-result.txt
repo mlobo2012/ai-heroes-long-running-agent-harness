@@ -1,0 +1,50 @@
+Sprint 6 evidence -- S6_evaluator_strict_no_bash
+================================================
+
+Acceptance criterion (verbatim):
+"agents/evaluator-strict.md ships with tools: Read, Glob, Grep (no Bash, no Write, no Edit). Suitable for content-domain goals where the soft Bash boundary is unacceptable. README documents it as the default for content evaluation."
+
+Artefacts and line citations:
+  agents/evaluator-strict.md lines 1-4 define the strict evaluator frontmatter;
+  line 4 is exactly tools: Read, Glob, Grep.
+  agents/evaluator-strict.md lines 11-15 say to use it for content goals such
+  as GEO articles, prose, and design QA where Bash is too generous.
+  agents/evaluator-strict.md lines 17-30 define a read-only grading contract and
+  explicitly say the evaluator cannot run commands or edit files.
+  agents/evaluator-strict.md lines 32-36 explain why dropping Bash matters and
+  name the engineering-goal trade-off.
+  README.md lines 66-72 add the strict evaluator section.
+  README.md line 68 names agents/evaluator-strict.md as Read/Glob/Grep only,
+  with no Bash, Write, or Edit.
+  README.md line 70 states it is the default grader for content-domain goals:
+  writing, GEO articles, prose, and design QA.
+  README.md line 72 states engineering goals can still use agents/evaluator.md
+  and accept the soft-Bash boundary.
+  README.md lines 291-294 extend the Components block to list
+  evaluator-strict.md alongside evaluator.md and codex-executor.md.
+
+T1 -- Strict tool grant.
+  Read of agents/evaluator-strict.md line 4 confirms tools: Read, Glob, Grep.
+  There is no Bash, Write, or Edit in the frontmatter tool list.
+  Result: PASS.
+
+T2 -- README documents default-for-content evaluation.
+  README.md line 70 says: use agents/evaluator-strict.md as the default grader
+  for content-domain goals.
+  Result: PASS.
+
+T3 -- README names the engineering trade-off.
+  README.md line 72 says engineering goals can still use agents/evaluator.md,
+  which has Bash, and accepts the soft-Bash boundary.
+  Result: PASS.
+
+T4 -- Components list updated.
+  README.md lines 291-294 list evaluator.md, evaluator-strict.md, and
+  codex-executor.md under agents/.
+  Result: PASS.
+
+T5 -- Sanity grep.
+  Command: grep -q 'evaluator-strict' README.md
+  Result: PASS.
+
+Self-grade: PASS.

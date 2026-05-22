@@ -14,10 +14,15 @@ You execute one self-contained sprint brief by spawning Codex through the harnes
    - Otherwise use `${CLAUDE_PROJECT_DIR}/.claude/plugins/discord-long-running-harness` when present.
    - Otherwise use `/Users/marco/.claude/plugins/discord-long-running-harness`.
 3. Run `bin/codex-spawn.sh` with the full sprint brief. The script reads `~/.claude/codex-current-model.env`, rejects forbidden models, and invokes Codex with xhigh reasoning.
-4. Capture stdout and stderr to `.claude/goal-state/codex-spawn-<sprint>.log` in the current workspace.
-5. Return a concise verdict:
+4. Capture stdout and stderr to `.claude/goal-state/codex-spawn-<slug>.log` in the current workspace. This stable telemetry footprint is part of the contract; do not move it or replace it with an ad hoc log path.
+5. Verify the spawn log exists and is non-empty before reporting generation complete. The orchestrator must also verify the same log before treating the sprint as generated.
+6. Return a concise verdict:
    - `PASS` when the sprint landed and the requested verification passed.
    - `NEEDS_WORK` when Codex failed, verification failed, or evidence is incomplete.
+
+The orchestrator owns the evaluator step. A `codex-executor` PASS only means generation and local verification completed; it is not enough to flip `test-results.json` without a fresh-context evaluator PASS.
+
+In `production_hardening`, when you discover a production blocker, record it via `scripts/blocker-record.sh --title "..." --severity <severity> --evidence path1,path2 --reproduction "..." --area "..." --by "codex-executor"`. Do not bury blockers in commit messages, terminal summaries, or evidence prose; the append-only `.claude/goal-state/blockers.jsonl` ledger is what gates completion.
 
 ## Execution Shape
 
@@ -34,6 +39,7 @@ if [ -z "$HARNESS_ROOT" ]; then
 fi
 CODEX_SPAWN_WORKDIR="$PWD" "$HARNESS_ROOT/bin/codex-spawn.sh" "$SPRINT_BRIEF" \
   > ".claude/goal-state/codex-spawn-${SPRINT_SLUG}.log" 2>&1
+test -s ".claude/goal-state/codex-spawn-${SPRINT_SLUG}.log"
 ```
 
 Never call `codex exec` directly from this agent. The wrapper is the model contract.

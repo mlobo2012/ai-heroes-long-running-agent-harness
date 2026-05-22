@@ -1,0 +1,69 @@
+# S7_outer_pulse_detects_stall_test
+
+Acceptance criterion verbatim:
+"tests/outer-pulse/stall-detection.sh: backdate last-beat by 25 minutes, invoke goal-supervisor heartbeat, confirm it produces a recovery note and (if webhook configured) attempts a Discord POST."
+
+Detailed acceptance criterion verbatim:
+"tests/outer-pulse/stall-detection.sh does the following in a mktemp scratchroot:
+1. Creates a fake active.jsonl with one session whose workspace is also a mktemp dir.
+2. Creates the workspace's .claude/goal-state/last-beat with a timestamp 25 minutes in the past.
+3. Creates a passing goal-state.json (status not "complete").
+4. Sets SUPERVISOR_ACTIVE_LEDGER, SUPERVISOR_STALL_THRESHOLD=1200, SUPERVISOR_RECOVERY_LOG, SUPERVISOR_DISCORD_WEBHOOK (optional -- if set, the test installs a curl function override that always succeeds and asserts it was called).
+5. Invokes scripts/supervisor-runner.sh.
+6. Asserts: exit 0; the recovery log has exactly one JSON line for that session with last_beat_age_seconds >= 1500 (25 min); if webhook was set, the curl override fired at least once.
+7. Cleans up the mktemp dirs.
+- A second sub-test asserts that a session with a FRESH last-beat (less than 60s ago) does NOT produce a recovery note."
+
+File-and-line citations:
+- `scripts/supervisor-runner.sh:43-46` defines synthetic-state env overrides for the active ledger, stall threshold, recovery log, and completion log.
+- `scripts/supervisor-runner.sh:183-202` reads `<workspace>/.claude/goal-state/goal-state.json` and `last-beat`, then flags stale beats over the configured threshold.
+- `scripts/supervisor-runner.sh:220-236` appends the stalled recovery JSON line and queues the webhook payload.
+- `scripts/supervisor-runner.sh:261-290` posts Discord webhook payloads with the same curl shape, timeout, attempts, and exponential backoff semantics as `hooks/discord-notify.sh`.
+- `tests/outer-pulse/stall-detection.sh:7-12` creates and cleans the mktemp scratchroot.
+- `tests/outer-pulse/stall-detection.sh:27-31` installs the exported `curl` override used by the webhook assertion.
+- `tests/outer-pulse/stall-detection.sh:41-54` backdates `last-beat` by 1500 seconds, writes the fake active ledger, sets supervisor env overrides, and invokes the runner.
+- `tests/outer-pulse/stall-detection.sh:56-69` asserts exactly one recovery JSON line, the matching session id, `last_beat_age_seconds >= 1500`, no missing paths, and a webhook curl call.
+- `tests/outer-pulse/stall-detection.sh:78-89` runs the fresh-beat sub-test and asserts no recovery note is written.
+- `docs/openclaw-supervisor/HEARTBEAT.md:61-72` appends the reference implementation section naming `scripts/supervisor-runner.sh` and both outer-pulse tests.
+
+T1 spot-check:
+Command: `bash -n scripts/supervisor-runner.sh`
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: `bash -n tests/outer-pulse/stall-detection.sh`
+Output: no output; exit 0.
+
+T3 spot-check:
+Command: `bash tests/outer-pulse/stall-detection.sh`
+Output:
+```text
+PASS - outer pulse stall detection
+```
+
+T4 spot-check:
+Command: `scripts/supervisor-runner.sh --help`
+Output excerpt:
+```text
+Usage: supervisor-runner.sh [--help]
+
+Runs the OpenClaw goal-supervisor heartbeat protocol against the active
+goal-session ledger.
+
+Environment overrides:
+  SUPERVISOR_ACTIVE_LEDGER     Default: ~/.claude/goal-sessions/active.jsonl
+  SUPERVISOR_STALL_THRESHOLD   Default: 1200
+  SUPERVISOR_RECOVERY_LOG      Default: ~/.claude/goal-sessions/recovery.log
+  SUPERVISOR_COMPLETION_LOG    Default: ~/.claude/goal-sessions/completion.log
+  SUPERVISOR_DISCORD_WEBHOOK   Optional Discord webhook for stall alerts
+```
+
+T5 spot-check:
+Command: `scripts/verify-install.sh --scope all`
+Output excerpt:
+```text
+PASS - supervisor runner executable
+PASS - outer-pulse fixture tests present
+```
+
+Self-grade: PASS. The test uses only mktemp state and supervisor env overrides, asserts the stale recovery JSONL content, verifies the webhook path through an exported curl override, and proves a fresh heartbeat stays silent.

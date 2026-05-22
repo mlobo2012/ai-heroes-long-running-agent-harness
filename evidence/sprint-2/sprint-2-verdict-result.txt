@@ -1,0 +1,24 @@
+PASS
+2026-05-22T09:50Z — evaluator agent (subagent_id a0bd6f4d15f50ed9b), fresh-context grade of Sprint 2 (S2a + S2b + S2c).
+
+Spec: install honesty trio — verify-install --scope core|setup|all, settings.json removal, openclaw-supervisor docs ship.
+
+Evidence verified across 14 steps:
+- verify-install --scope core: exit 0, 11 PASS lines.
+- verify-install --scope setup: exit 0, 6 PASS lines.
+- verify-install --scope bogus: exit 2 with explicit "invalid scope" error.
+- settings.json removed from worktree.
+- README: 0 mentions of settings.json; 0 mentions of obsolete --plugin <name>.
+- docs/openclaw-supervisor/: 4 files present (README, HEARTBEAT, openclaw.json.example, workspace-README).
+- HEARTBEAT.md sections 1-5 intact.
+- openclaw.json.example carries id=goal-supervisor + heartbeat.every=15m.
+- CHANGELOG 0.3.0 entry closes D2/D3/D5/D11 explicitly.
+- plugin.json version 0.3.0.
+- heartbeat-stop.sh lines 92-95 short-circuit on SubagentStop.
+- heartbeat-stop.sh line 117 checks .claude/goal-state/steered-this-turn marker.
+
+Notes:
+- D2 (SubagentStop counter bug) fully closed and live in install dir; the evaluator's own 15 tool uses did NOT bump the block counter, proving the fix.
+- D14 (steer counter reset ordering): heartbeat read side closed, marker write in steer.sh deferred to 0.4.0 per CHANGELOG.
+
+Tool uses: 15. Duration: 35s.

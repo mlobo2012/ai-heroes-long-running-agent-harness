@@ -1,0 +1,47 @@
+Acceptance criterion verbatim:
+
+S13_session_ledger:
+- `hooks/heartbeat-stop.sh` extension: on Stop (NOT SubagentStop) AND when the goal becomes complete (results_count false == 0) OR when AGENT_STOP is set, append a JSON line to `.claude/goal-state/sessions.jsonl` with fields:
+  - `session_id` (read from goal-state.json if available, else generate a uuid)
+  - `started_at` (read from goal-state.json's `started_at` if available, else `now - last_beat_age` from earliest data; honest fallback if unavailable)
+  - `ended_at` (now, ISO8601)
+  - `sprints_passed` (the current results_count true count)
+  - `evidence_reads` (line count of the live evidence-reads log when it's non-empty; or a cumulative counter if reasonable; otherwise "unavailable")
+  - `commits` (current branch ahead-of-main count via `git rev-list main..HEAD --count` best-effort)
+  - `exit_reason` (one of: `goal-met`, `operator-kill-switch`, `anti-runaway-cap`)
+- Best-effort: failures don't crash the Stop hook chain.
+- Unit test in `tests/session-ledger/append-on-stop.sh` confirms the ledger gains a line on a synthetic goal-complete Stop.
+
+File-and-line citations:
+- hooks/heartbeat-stop.sh:25-28 preserves the previous `last-beat` value before the hook writes the new heartbeat.
+- hooks/heartbeat-stop.sh:96-99 exits early for `SubagentStop`, before any ledger append path.
+- hooks/heartbeat-stop.sh:132-166 defines the best-effort `append_session_ledger` wrapper and sends all data to Python with failures swallowed.
+- hooks/heartbeat-stop.sh:142-158 computes `evidence_reads` from `.claude/.evidence-reads` and `commits` from `git rev-list main..HEAD --count` best-effort.
+- hooks/heartbeat-stop.sh:214-232 reads `session_id` and `started_at` from `goal-state.json`, falls back to a generated UUID, previous last beat, or `"unavailable"`.
+- hooks/heartbeat-stop.sh:235-264 writes the required JSON object to `.claude/goal-state/sessions.jsonl` and dedupes by `session_id`.
+- hooks/heartbeat-stop.sh:271-275 appends `operator-kill-switch` on the AGENT_STOP allow path.
+- hooks/heartbeat-stop.sh:338-350 appends `goal-met` only after false count is zero and the blocker gate allows completion.
+- hooks/heartbeat-stop.sh:373-375 appends `anti-runaway-cap` on the cap allow path.
+- tests/session-ledger/append-on-stop.sh:34-41 synthesizes goal state, passing results, and evidence-read lines.
+- tests/session-ledger/append-on-stop.sh:43-68 fires a Stop and asserts the expected schema and values.
+- tests/session-ledger/append-on-stop.sh:70-75 fires a second Stop and asserts idempotence.
+- README.md:107 documents the local `sessions.jsonl` operator surface.
+
+T1 spot-check:
+Command: `bash -n hooks/heartbeat-stop.sh`
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: `bash tests/session-ledger/append-on-stop.sh`
+Output: `PASS - session ledger appends one schema-valid line on goal-complete Stop`
+
+T3 spot-check:
+Command: `bash tests/cap/eight-block-cap.sh`
+Output: `PASS eight-block anti-runaway cap`
+
+T4 spot-check:
+Command: `scripts/verify-install.sh --scope all`
+Output included: `PASS - session ledger write path present`
+
+Self-grade:
+PASS. The ledger append is Stop-only, terminal-path-only, schema-valid, idempotent by session id, and best-effort so it cannot break the existing stop chain.

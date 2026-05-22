@@ -1,0 +1,39 @@
+=== Sprint 3 — hooks hardening (D1, D7, D8, D14) ===
+Date: 2026-05-22T09:56:18Z
+
+## T1 (D14): steer.sh writes .claude/goal-state/steered-this-turn
+  PASS - marker written
+  PASS - STEER.md was cleared
+
+## T2 (D1): kill-switch.sh honors WORKDIR/AGENT_STOP from sub-cwd
+  PASS - kill-switch fired from subdir with WORKDIR set
+
+## T3 (D7): results_count ignores prior_passes / sub_passes
+  PASS - heartbeat-stop allowed goal-met (prior_passes/sub_passes false correctly ignored)
+
+## T4 (D7 fallback): anchored regex rejects prior_passes pattern
+  PASS - fallback regex correctly returns true=1, false=0 (not double-counted by prior_passes)
+
+## T5 (D8): register-goal dedupes by workspace
+  PASS - 3 registrations -> 1 ledger line; latest goal preserved
+  PASS - different workspace adds a new line (2 distinct sessions tracked)
+
+## T6 (D10): codex-spawn exit code 5 documented in README
+  PASS - README documents exit code 5
+
+## T7: verify-install --scope all still PASS
+PASS - enable-for-launcher dry-run does not edit
+PASS - launchers do not use obsolete --plugin flag
+PASS - router workers inherit harness plugin dir
+
+
+## T8: CHANGELOG + plugin.json bumped to 0.4.0
+  PASS - CHANGELOG 0.4.0 entry exists
+  PASS - plugin.json version is 0.4.0
+
+## T9: install vs worktree post-sync diff (critical files)
+  PASS - hooks/steer.sh identical to install
+  PASS - hooks/kill-switch.sh identical to install
+  PASS - hooks/heartbeat-stop.sh identical to install
+  PASS - hooks/discord-notify.sh identical to install
+  PASS - scripts/register-goal.sh identical to install

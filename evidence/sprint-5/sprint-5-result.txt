@@ -1,0 +1,50 @@
+Sprint 5 evidence -- S5_session_start_hook_bootstrap
+====================================================
+
+Acceptance criterion (verbatim):
+"A new SessionStart hook ensures PROGRESS.md and test-results.json exist (creating skeletons if missing) and blocks the session otherwise. Wired into hooks/hooks.json."
+
+Artefacts and line citations:
+  hooks/session-start.sh lines 5-14 describe the idempotent SessionStart
+  bootstrap and now state that bootstrap failures block session start with exit 2.
+  hooks/session-start.sh lines 21-40 define fail_bootstrap plus readable,
+  non-empty file/dir validators.
+  hooks/session-start.sh lines 42-43 create and validate .claude/goal-state.
+  hooks/session-start.sh lines 45-71 create PROGRESS.md if missing, then require
+  it to be readable and non-empty whether it was new or pre-existing.
+  hooks/session-start.sh lines 73-85 create test-results.json if missing, then
+  require it to be readable and non-empty whether it was new or pre-existing.
+  hooks/session-start.sh lines 87-91 create and validate block-count, then
+  revalidate .claude/goal-state.
+  hooks/hooks.json lines 4-13 wire SessionStart to
+  "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh".
+
+T1 -- Happy-path bootstrap creates skeletons and exits 0.
+  Command: run hooks/session-start.sh in a fresh mktemp workspace.
+  Result: PASS. Exit status was 0. Created files were:
+    test-results.json (201 bytes)
+    PROGRESS.md (259 bytes)
+    .claude/goal-state/block-count (2 bytes)
+
+T2 -- Hostile filesystem / empty artefact exits 2.
+  Fixture: fresh mktemp workspace with an existing empty PROGRESS.md.
+  Command: run hooks/session-start.sh from that workspace.
+  Result: PASS. Exit status was 2 and stderr was:
+    session-start: PROGRESS.md is empty: <tmp>/PROGRESS.md
+
+T3 -- Comment block no longer says "Does NOT block".
+  hooks/session-start.sh lines 10-14 now say the hook blocks session start with
+  exit 2 if bootstrap cannot create readable, non-empty harness artefacts.
+  Result: PASS.
+
+T4 -- Idempotent design preserved.
+  The create branches remain guarded by [ ! -f "$PROGRESS" ],
+  [ ! -f "$RESULTS" ], and [ ! -f "$STATE_DIR/block-count" ] at lines 45, 73,
+  and 87. Existing non-empty files are validated but not overwritten.
+  Result: PASS.
+
+T5 -- Wiring exists.
+  hooks/hooks.json lines 4-13 declare the SessionStart hook command.
+  Result: PASS.
+
+Self-grade: PASS.
