@@ -1,8 +1,22 @@
-FAIL don-draper missing-plugin-dir
+PASS don-draper plugin-dir
 PASS klaus plugin-dir
-FAIL ray-kroc missing-plugin-dir
+PASS ray-kroc plugin-dir
 PASS richard plugin-dir
-FAIL schmidt missing-plugin-dir
+PASS schmidt plugin-dir
 PASS ted-mosby plugin-dir
-audit total=6 pass=3 fail=3
-EXIT_CODE=1
+audit total=6 pass=6 fail=0
+EXIT_CODE=0
+
+Notes (orchestrator):
+- This run was captured AFTER three operator-scope launcher remediations.
+- start-don-draper.sh, start-ray-kroc.sh, start-schmidt.sh were edited to add
+  `--plugin-dir /Users/marco/.claude/plugins/discord-long-running-harness`
+  to the claude invocation (mirroring start-richard.sh).
+- Pre-remediation audit had shown 3 FAIL launchers (don-draper, ray-kroc,
+  schmidt) with EXIT_CODE=1. That run was the artefact that surfaced the
+  drift the H7 audit was designed to catch.
+- Backups of the three launchers were saved at
+  ~/.claude/channels/discord/start-<slug>.sh.bak.1779488519.heartbeat-h7
+  so the change is reversible per the harness's reversibility rule.
+- The three remediated agents will need a screen-session restart for the new
+  flag to take effect at runtime (operator action, separate from this sprint).
