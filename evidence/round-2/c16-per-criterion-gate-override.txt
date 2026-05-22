@@ -1,0 +1,8 @@
+=== without override: per-criterion gate blocks (no evidence Read) ===
+{"decision":"block","reason":"Cannot flip criteria to pass without reading their evidence_paths first. C1: none of screenshots/c1.png were Read this session"}
+
+=== with override: gate falls back to session-level (which also blocks because evidence log is empty) ===
+{"decision":"block","reason":"Cannot modify the results file: no screenshot or console-log evidence has been Read this session. Open the evidence file with the Read tool first, then retry."}
+
+=== with override + evidence read recorded: session-level allows ===
+  PASS — write allowed (session-level mode)

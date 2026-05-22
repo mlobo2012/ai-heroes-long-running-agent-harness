@@ -77,6 +77,18 @@ Then create or update `test-results.json` so every acceptance criterion starts w
 
 ## Sprint-contract handshake
 
+Before invoking the contract-reviewer, check whether the operator set
+the re-simplify override `contract-reviewer`:
+
+```
+.claude/goal-state/re-simplify-overrides.json
+```
+
+If that JSON object contains a `contract-reviewer` key, **skip the
+handshake** and return the plan directly. The operator is benching
+whether the handshake is still load-bearing on the current model. If
+the key is absent (the default), the handshake is required.
+
 After writing the first draft, run the contract-reviewer subagent:
 
 ```

@@ -15,6 +15,22 @@ set -u
 log="${VERIFY_READ_LOG:-./.claude/.evidence-reads}"
 results="${RESULTS_FILE:-test-results.json}"
 
+# re-simplify override: operator can disable this gate entirely to bench
+# whether it is still load-bearing on the current model.
+override_file="./.claude/goal-state/re-simplify-overrides.json"
+if [ -f "$override_file" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "bash-gate" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$override_file" 2>/dev/null; then
+    exit 0
+  fi
+fi
+
 input=$(cat)
 cmd=$(printf '%s' "$input" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tool_input",{}).get("command",""))' 2>/dev/null)
 [ -z "$cmd" ] && exit 0

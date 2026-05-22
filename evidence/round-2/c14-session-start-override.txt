@@ -1,0 +1,7 @@
+=== without override: session-start emits orientation ===
+## Session orientation (auto-seeded by session-start hook)
+
+### Goal state
+
+=== with override: session-start emits skip notice ===
+## Session orientation skipped (re-simplify --target session-start)

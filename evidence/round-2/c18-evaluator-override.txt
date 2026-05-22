@@ -1,0 +1,11 @@
+=== without override: heartbeat blocks awaiting-evaluator-pass ===
+{"decision":"block","reason":"awaiting-evaluator-pass; continue"}
+rc=2
+
+=== with evaluator override: heartbeat allows (RISKY) ===
+rc=0
+
+=== heartbeat log shows the override warning ===
+2026-05-22T07:24:14Z block awaiting-evaluator-pass
+2026-05-22T07:24:14Z re-simplify evaluator gate disabled by override (risky)
+2026-05-22T07:24:14Z allow goal-met-with-evaluator-pass

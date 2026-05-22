@@ -1,0 +1,9 @@
+=== without override: pre-compact writes snapshot ===
+## Pre-compact snapshot written
+
+Contract state was snapshotted to `/tmp/tmp.E0ll41UUqP/ws/.claude/goal-state/post-compact-orientation.md` before compaction. After compaction completes, Read that file to recover the acceptance contract and last QA verdict.
+  snapshot present: YES
+
+=== with override: pre-compact emits skip notice, no snapshot ===
+## Pre-compact snapshot skipped (re-simplify --target pre-compact)
+  snapshot present: NO

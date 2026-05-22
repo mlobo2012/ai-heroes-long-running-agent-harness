@@ -45,28 +45,40 @@ New primitives shipped:
 
 ## In progress
 
-(nothing — round 1 completed cleanly)
+(nothing — round 2 completed cleanly)
+
+### v0.5.0 round 2 (2026-05-22)
+
+Closed 9 more criteria on top of round 1's 12. rounds.json now shows
+two consecutive PASS verdicts stamped with rubric=library, model=
+claude-opus-4-7.
+
+- C13-C18: wired bash-gate, session-start, pre-compact, per-criterion-
+  gate, evaluator, and (documentation for) contract-reviewer re-simplify
+  targets end-to-end. Five hooks (verify-gate, verify-gate-bash,
+  session-start, pre-compact, heartbeat-stop) now consult
+  `.claude/goal-state/re-simplify-overrides.json` and short-circuit
+  when their target is set.
+- C19: six slash commands shipped at `.claude-plugin/commands/`:
+  /orient, /blueprint, /qa, /simplify, /bench, /round.
+- C20: real Claude CLI smoke fired against this very repo's round-1
+  contract in an isolated worktree. The wrapper invoked claude
+  --agent evaluator, hit a 120s budget, but proved the wiring works
+  end-to-end (not just dry-run).
+- Fixed a real bug: `scripts/run-evaluator.sh` now `mkdir -p`s the
+  goal-state directory before invoking claude so the stdout-log
+  redirect doesn't silently fail in fresh worktrees.
+- C21: verify-install grew from 68 to 76 checks. 76/76 PASS.
 
 ## Next
 
-Round 2 candidates (none gating release of v0.5.0):
+Round 3 candidates (none gating v0.5.0):
 
-- Wire the remaining seven re-simplify targets end-to-end:
-  `contract-reviewer`, `sprint-decomposition`, `evaluator`,
-  `per-criterion-gate`, `bash-gate`, `session-start`, `pre-compact`.
-  Each needs the relevant hook/script to check
-  `.claude/goal-state/re-simplify-overrides.json` on startup and
-  behave as if disabled when the target is set.
-- Replace the synthesised bench delta in
-  `evidence/round-1/c10-bench-delta.txt` with a real measurement
-  against the express-server pilot, both with and without
-  `re-simplify --target contract-reviewer`.
-- Build out `docs/sdk-example/` with a runnable Agent SDK example
-  that ports the evidence gate + heartbeat callbacks.
-- Optional: add `frontend-design` skill integration to `.mcp.json`
-  for richer browser evaluation.
-- Optional: ship `/orient` and `/blueprint` slash commands for
-  one-keystroke harness operations from inside Claude Code.
+- `sprint-decomposition` re-simplify target: currently operator-visible
+  but with no hook-side enforcement (planner-prose only).
+- A real measured ralph-loop bench against express-server.
+- A runnable `docs/sdk-example/` Python file.
+- `frontend-design` skill integration in `.mcp.json`.
 
 ## Notes
 

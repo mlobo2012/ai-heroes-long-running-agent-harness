@@ -273,7 +273,26 @@ if results_have_failures; then
   block_continue "goal-not-met"
 fi
 
-if ! qa_has_pass; then
+# re-simplify override: operator can disable the evaluator gate entirely
+# to bench whether the gate is still load-bearing on the current model.
+# RISKY by design — the heartbeat will allow goal-completion based on
+# test-results.json alone. Documented as the highest-risk override.
+evaluator_override_set=0
+if [ -f "$STATE_DIR/re-simplify-overrides.json" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "evaluator" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$STATE_DIR/re-simplify-overrides.json" 2>/dev/null; then
+    evaluator_override_set=1
+    log_status "re-simplify" "evaluator gate disabled by override (risky)"
+  fi
+fi
+
+if [ "$evaluator_override_set" != "1" ] && ! qa_has_pass; then
   qa_first=$(first_nonempty_line "$QA_REPORT_FILE" || true)
   if [ "$qa_first" = "NEEDS_WORK" ]; then
     append_round "NEEDS_WORK"

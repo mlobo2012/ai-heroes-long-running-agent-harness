@@ -284,6 +284,122 @@ check_agent_sdk_doc_present() {
   done
 }
 
+check_re_simplify_bash_gate_override() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  ws="$tmp/ws"
+  mkdir -p "$ws/.claude/goal-state"
+  echo '{"criteria":[{"id":"C1","passes":false,"evidence_paths":[]}]}' > "$ws/test-results.json"
+  : > "$ws/.claude/.evidence-reads"
+  cd "$ws"
+  # Without override: bash gate must block
+  out_no=$("$PLUGIN_DIR/hooks/verify-gate-bash.sh" <<<'{"tool_input":{"command":"sed -i s/false/true/ test-results.json"}}' 2>/dev/null)
+  cd - >/dev/null
+  printf '%s' "$out_no" | grep -q '"decision":"block"' || return 1
+  # Set override
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$ws" --target bash-gate --reason "verify" >/dev/null
+  cd "$ws"
+  out_yes=$("$PLUGIN_DIR/hooks/verify-gate-bash.sh" <<<'{"tool_input":{"command":"sed -i s/false/true/ test-results.json"}}' 2>/dev/null)
+  cd - >/dev/null
+  # With override: must not block
+  [ -z "$out_yes" ] || ! printf '%s' "$out_yes" | grep -q '"decision":"block"'
+}
+
+check_re_simplify_session_start_override() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  ws="$tmp/ws"
+  mkdir -p "$ws/.claude/goal-state"
+  printf '{"rubric":"library"}\n' > "$ws/.claude/goal-state/goal-state.json"
+  out_no=$(CLAUDE_PROJECT_DIR="$ws" "$PLUGIN_DIR/hooks/session-start.sh" 2>/dev/null)
+  printf '%s' "$out_no" | grep -q 'Session orientation (auto-seeded' || return 1
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$ws" --target session-start --reason "verify" >/dev/null
+  out_yes=$(CLAUDE_PROJECT_DIR="$ws" "$PLUGIN_DIR/hooks/session-start.sh" 2>/dev/null)
+  printf '%s' "$out_yes" | grep -q 'orientation skipped (re-simplify' || return 1
+  printf '%s' "$out_yes" | grep -qv 'Session orientation (auto-seeded'
+}
+
+check_re_simplify_pre_compact_override() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  ws="$tmp/ws"
+  mkdir -p "$ws/.claude/goal-state"
+  echo '## Acceptance Contract' > "$ws/BUILD_PLAN.md"
+  CLAUDE_PROJECT_DIR="$ws" "$PLUGIN_DIR/hooks/pre-compact.sh" >/dev/null 2>&1
+  [ -f "$ws/.claude/goal-state/post-compact-orientation.md" ] || return 1
+  rm -f "$ws/.claude/goal-state/post-compact-orientation.md"
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$ws" --target pre-compact --reason "verify" >/dev/null
+  out=$(CLAUDE_PROJECT_DIR="$ws" "$PLUGIN_DIR/hooks/pre-compact.sh" 2>/dev/null)
+  printf '%s' "$out" | grep -q 'snapshot skipped' || return 1
+  [ ! -f "$ws/.claude/goal-state/post-compact-orientation.md" ]
+}
+
+check_re_simplify_per_criterion_override() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  ws="$tmp/ws"
+  mkdir -p "$ws/.claude" "$ws/screenshots"
+  cd "$ws"
+  cat > test-results.json <<'JSON'
+{"criteria":[{"id":"C1","description":"x","evidence_paths":["screenshots/c1.png"],"passes":false}]}
+JSON
+  : > .claude/.evidence-reads
+  proposed='{"criteria":[{"id":"C1","description":"x","evidence_paths":["screenshots/c1.png"],"passes":true}]}'
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"file_path":"test-results.json","content":sys.argv[1]}}))' "$proposed")
+  # Without override: per-criterion blocks with that-specific error
+  out_no=$(printf '%s' "$payload" | "$PLUGIN_DIR/hooks/verify-gate.sh" 2>/dev/null)
+  cd - >/dev/null
+  printf '%s' "$out_no" | grep -q 'Cannot flip criteria to pass' || return 1
+  # With override: falls back to session-level — same payload still blocks (empty log) but with the session-level message
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$ws" --target per-criterion-gate --reason "verify" >/dev/null
+  cd "$ws"
+  out_yes=$(printf '%s' "$payload" | "$PLUGIN_DIR/hooks/verify-gate.sh" 2>/dev/null)
+  cd - >/dev/null
+  printf '%s' "$out_yes" | grep -q 'no screenshot or console-log evidence has been Read'
+}
+
+check_re_simplify_evaluator_override() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  ws="$tmp/ws"
+  mkdir -p "$ws/.claude/goal-state"
+  printf '{"session_id":"v","rubric":"library"}\n' > "$ws/.claude/goal-state/goal-state.json"
+  printf '{"criteria":[{"id":"C1","passes":true}]}\n' > "$ws/test-results.json"
+  # No QA_REPORT.md
+  set +e
+  cd "$ws" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' >/dev/null 2>&1
+  no_status=$?
+  cd - >/dev/null
+  set -e
+  [ "$no_status" -eq 2 ] || return 1
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$ws" --target evaluator --reason "verify" >/dev/null
+  set +e
+  cd "$ws" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' >/dev/null 2>&1
+  yes_status=$?
+  cd - >/dev/null
+  set -e
+  [ "$yes_status" -eq 0 ]
+}
+
+check_planner_documents_contract_reviewer_override() {
+  grep -q 'contract-reviewer' "$PLUGIN_DIR/agents/planner.md" || return 1
+  grep -q 're-simplify' "$PLUGIN_DIR/agents/planner.md" || return 1
+  grep -q '.claude/goal-state/re-simplify-overrides.json' "$PLUGIN_DIR/agents/planner.md"
+}
+
+check_slash_commands_present() {
+  for cmd in orient blueprint qa simplify bench round; do
+    [ -f "$PLUGIN_DIR/.claude-plugin/commands/${cmd}.md" ] || { echo "missing /${cmd}" >&2; return 1; }
+    grep -q '^description:' "$PLUGIN_DIR/.claude-plugin/commands/${cmd}.md" || { echo "${cmd}.md missing description frontmatter" >&2; return 1; }
+  done
+}
+
+check_run_evaluator_mkdirs_state_dir() {
+  # The script must mkdir -p the goal-state dir before invoking claude so the
+  # stdout-log redirect doesn't fail in a fresh worktree.
+  grep -q 'mkdir -p "\$EVAL_DIR/.claude/goal-state"' "$PLUGIN_DIR/scripts/run-evaluator.sh"
+}
+
 check_bench_score_shows_delta() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
@@ -1016,5 +1132,13 @@ check "run-evaluator writes NEXT_FINDINGS.md on NEEDS_WORK" check_run_evaluator_
 check "CLAUDE.md leads with the harness, not with Discord" check_claude_md_no_discord_lead
 check "docs/agent-sdk-equivalent.md present and complete" check_agent_sdk_doc_present
 check "bench-score reports a numeric delta" check_bench_score_shows_delta
+check "re-simplify bash-gate override disables verify-gate-bash" check_re_simplify_bash_gate_override
+check "re-simplify session-start override skips orientation" check_re_simplify_session_start_override
+check "re-simplify pre-compact override skips snapshot" check_re_simplify_pre_compact_override
+check "re-simplify per-criterion-gate override falls back to session-level" check_re_simplify_per_criterion_override
+check "re-simplify evaluator override (risky) lets heartbeat allow without QA PASS" check_re_simplify_evaluator_override
+check "planner agent documents contract-reviewer override" check_planner_documents_contract_reviewer_override
+check "slash commands ship for orient/blueprint/qa/simplify/bench/round" check_slash_commands_present
+check "run-evaluator mkdirs goal-state before invoking claude" check_run_evaluator_mkdirs_state_dir
 
 exit "$failures"

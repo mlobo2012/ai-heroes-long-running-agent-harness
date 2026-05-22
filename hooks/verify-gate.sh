@@ -25,9 +25,29 @@ target=$(printf '%s' "$input" | python3 -c 'import json,sys; print(json.load(sys
 # Only guard the results file (anchor on path separator so e.g. vitest-results.json doesn't match)
 case "$target" in "$results"|*/"$results") ;; *) exit 0 ;; esac
 
+# re-simplify override: operator can force the gate to fall back to
+# session-level (upstream-compatible) mode even when the results file
+# uses the criteria array shape. Lets the operator bench whether the
+# per-criterion enforcement is still load-bearing on the current model.
+PER_CRITERION_OVERRIDE=0
+override_file="./.claude/goal-state/re-simplify-overrides.json"
+if [ -f "$override_file" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "per-criterion-gate" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$override_file" 2>/dev/null; then
+    PER_CRITERION_OVERRIDE=1
+  fi
+fi
+
 # Per-criterion mode if results file already uses criteria array with evidence_paths
+# (skipped when the operator set the per-criterion-gate re-simplify override).
 PER_CRITERION=0
-if [ -f "$results" ] && python3 -c 'import json,sys
+if [ "$PER_CRITERION_OVERRIDE" != "1" ] && [ -f "$results" ] && python3 -c 'import json,sys
 try:
     d=json.load(open(sys.argv[1]))
     items=d.get("criteria") if isinstance(d,dict) else None

@@ -12,6 +12,22 @@ set -u
 WORKDIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$WORKDIR" || exit 0
 
+# re-simplify override: operator can disable session-start re-seed to
+# bench whether the re-seed is still load-bearing on the current model.
+if [ -f "$WORKDIR/.claude/goal-state/re-simplify-overrides.json" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "session-start" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$WORKDIR/.claude/goal-state/re-simplify-overrides.json" 2>/dev/null; then
+    echo "## Session orientation skipped (re-simplify --target session-start)"
+    exit 0
+  fi
+fi
+
 emit() { printf '%s\n' "$1"; }
 
 emit "## Session orientation (auto-seeded by session-start hook)"

@@ -80,6 +80,7 @@ cd "$EVAL_DIR"
 
 PROMPT="Run the evaluator agent. Read BUILD_PLAN.md, test-results.json, the diff, and every evidence path. For UI tasks drive the running app via Playwright MCP and write the trace under playwright-mcp/round-N/. For desktop tasks drive the system via native computer-use and write the session log under computer-use/round-N/. Write QA_REPORT.md with a bare PASS or NEEDS_WORK on line 1."
 
+mkdir -p "$EVAL_DIR/.claude/goal-state"
 claude -p --agent evaluator "$PROMPT" \
   > "$EVAL_DIR/.claude/goal-state/evaluator-stdout.log" 2>&1 || true
 

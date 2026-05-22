@@ -1,0 +1,65 @@
+=== shipped slash commands ===
+total 32
+drwxr-xr-x 2 root root 4096 May 22 07:25 .
+drwxr-xr-x 3 root root 4096 May 22 07:24 ..
+-rw-r--r-- 1 root root  850 May 22 07:24 bench.md
+-rw-r--r-- 1 root root  939 May 22 07:24 blueprint.md
+-rw-r--r-- 1 root root 1093 May 22 07:24 orient.md
+-rw-r--r-- 1 root root 1224 May 22 07:24 qa.md
+-rw-r--r-- 1 root root  731 May 22 07:25 round.md
+-rw-r--r-- 1 root root 1955 May 22 07:24 simplify.md
+
+--- /orient (description) ---
+description: Re-read BUILD_PLAN, PROGRESS, QA_REPORT, NEXT_FINDINGS, and recent git log so the next turn is fully oriented.
+--- /orient (first 5 lines of body) ---
+Re-orient against the long-running agent harness contract. Do all of
+the following in one turn:
+1. Read `BUILD_PLAN.md` and surface the Acceptance Contract section.
+2. Read `PROGRESS.md`. Summarise what is Done vs In progress vs Next
+   in two sentences.
+
+--- /blueprint (description) ---
+description: Invoke the planner subagent to produce BUILD_PLAN.md and a default-fail test-results.json against the operator goal.
+--- /blueprint (first 5 lines of body) ---
+Invoke the bundled `planner` subagent. It will:
+1. Read the operator goal (everything after the slash command).
+2. Honor `.claude/goal-state/goal-state.json`'s pinned rubric if set.
+3. Pick a rubric from `agents/rubrics/` if none is pinned.
+4. Write `BUILD_PLAN.md` with Goal, Product Spec, Acceptance Contract
+
+--- /qa (description) ---
+description: Invoke the evaluator subagent. Writes QA_REPORT.md with PASS or NEEDS_WORK. Updates NEXT_FINDINGS.md automatically on NEEDS_WORK.
+--- /qa (first 5 lines of body) ---
+Invoke the bundled `evaluator` subagent. It will:
+1. Read `BUILD_PLAN.md`, `test-results.json`, the diff, and every
+   evidence path declared in `BUILD_PLAN.md`.
+2. Read the tail of `.claude/goal-state/evaluator-calibration.jsonl`
+   for operator overrides on prior verdicts.
+
+--- /simplify (description) ---
+description: Set, inspect, or restore a re-simplify override. Disable one harness piece, run the bench, decide if it is still load-bearing on the current model.
+--- /simplify (first 5 lines of body) ---
+Invoke the re-simplify procedure described in the March 2026 article:
+"Every component encodes assumptions about model limitations. These
+assumptions warrant continuous stress-testing because they become
+stale as capabilities improve."
+Use this command to set or clear a re-simplify override:
+
+--- /bench (description) ---
+description: Run the bench rig against a pilot and write a score JSON. Use to measure whether a re-simplify override is safe to keep.
+--- /bench (first 5 lines of body) ---
+Invoke `scripts/bench-harness.sh` against a pilot in
+`bench/pilots/`. The rig records wall-clock, rounds-to-pass,
+false-pass status, and an I/O byte estimate to a score JSON.
+Pair with `scripts/bench-score.py` to diff two runs:
+```bash
+
+--- /round (description) ---
+description: Show artifacts under a specific round-N directory. Useful for inspecting what the evaluator produced last round.
+--- /round (first 5 lines of body) ---
+List every artifact under the round-N namespaced directories for the
+round number passed as $ARGUMENTS (default: current round).
+Specifically inspect:
+- `screenshots/round-N/`
+- `evidence/round-N/`
+

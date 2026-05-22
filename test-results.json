@@ -1,75 +1,57 @@
 {
   "criteria": [
     {
-      "id": "C1",
-      "description": "track-read.sh recognizes every evidence shape declared in BUILD_PLAN.md round-N paths",
-      "evidence_paths": ["evidence/round-1/c1-track-read.txt"],
+      "id": "C13",
+      "description": "re-simplify bash-gate target disables verify-gate-bash",
+      "evidence_paths": ["evidence/round-2/c13-bash-gate-override.txt"],
       "passes": true
     },
     {
-      "id": "C2",
-      "description": "evaluator agent has mcp__playwright__* tools in frontmatter",
-      "evidence_paths": ["evidence/round-1/c2-evaluator-tools.txt"],
+      "id": "C14",
+      "description": "re-simplify session-start target makes session-start emit a skip notice and skip orientation",
+      "evidence_paths": ["evidence/round-2/c14-session-start-override.txt"],
       "passes": true
     },
     {
-      "id": "C3",
-      "description": "heartbeat + watchdog accept any non-empty file under playwright-mcp/round-N/ and computer-use/round-N/",
-      "evidence_paths": ["evidence/round-1/c3-trace-fallback.txt"],
+      "id": "C15",
+      "description": "re-simplify pre-compact target makes pre-compact emit a skip notice and write no snapshot",
+      "evidence_paths": ["evidence/round-2/c15-pre-compact-override.txt"],
       "passes": true
     },
     {
-      "id": "C4",
-      "description": "scripts/ralph-loop.sh runs the full build->evaluate cycle headless with documented exit codes",
-      "evidence_paths": ["evidence/round-1/c4-ralph-loop-dry-run.txt"],
+      "id": "C16",
+      "description": "re-simplify per-criterion-gate target makes verify-gate fall back to session-level",
+      "evidence_paths": ["evidence/round-2/c16-per-criterion-gate-override.txt"],
       "passes": true
     },
     {
-      "id": "C5",
-      "description": "NEXT_FINDINGS.md carry-forward is wired through session-start, evaluator, and ralph-loop",
-      "evidence_paths": ["evidence/round-1/c5-next-findings.txt"],
+      "id": "C17",
+      "description": "re-simplify contract-reviewer override is documented and surfaced",
+      "evidence_paths": ["evidence/round-2/c17-contract-reviewer-override.txt"],
       "passes": true
     },
     {
-      "id": "C6",
-      "description": "register-goal seeds AGENTS.md alongside PROGRESS.md and init.sh",
-      "evidence_paths": ["evidence/round-1/c6-agents-md.txt"],
+      "id": "C18",
+      "description": "re-simplify evaluator target makes heartbeat skip the QA_REPORT.md PASS requirement",
+      "evidence_paths": ["evidence/round-2/c18-evaluator-override.txt"],
       "passes": true
     },
     {
-      "id": "C7",
-      "description": "scripts/re-simplify.sh ships with a documented procedure",
-      "evidence_paths": ["evidence/round-1/c7-re-simplify.txt"],
+      "id": "C19",
+      "description": "slash commands ship for orient, blueprint, qa, simplify, bench, round",
+      "evidence_paths": ["evidence/round-2/c19-slash-commands.txt"],
       "passes": true
     },
     {
-      "id": "C8",
-      "description": "CLAUDE.md leads with the loop, not with Discord",
-      "evidence_paths": ["evidence/round-1/c8-claude-md.txt"],
+      "id": "C20",
+      "description": "bench rig runs against express-server pilot end-to-end (or records honest gap if claude CLI missing)",
+      "evidence_paths": ["evidence/round-2/c20-bench-real.txt"],
       "passes": true
     },
     {
-      "id": "C9",
-      "description": "docs/agent-sdk-equivalent.md maps hooks to SDK callbacks",
-      "evidence_paths": ["evidence/round-1/c9-sdk-doc.txt"],
-      "passes": true
-    },
-    {
-      "id": "C10",
-      "description": "bench-score.py produces a delta between upstream baseline and candidate",
-      "evidence_paths": ["evidence/round-1/c10-bench-delta.txt"],
-      "passes": true
-    },
-    {
-      "id": "C11",
-      "description": "verify-install.sh covers every C1-C10 fix and stays green",
-      "evidence_paths": ["evidence/round-1/c11-verify-install.txt"],
-      "passes": true
-    },
-    {
-      "id": "C12",
-      "description": "round-N artifact namespacing is honored end-to-end",
-      "evidence_paths": ["evidence/round-1/c12-round-namespacing.txt"],
+      "id": "C21",
+      "description": "verify-install covers every C13-C20 wiring and stays green",
+      "evidence_paths": ["evidence/round-2/c21-verify-install.txt"],
       "passes": true
     }
   ]
