@@ -1,0 +1,80 @@
+PASS - plugin dir and plugin.json
+PASS - settings.json valid
+PASS - hook scripts executable
+PASS - planner, evaluator, and codex agents present
+PASS - rubric library and planner picker present
+PASS - codex-executor has no hardcoded user path
+PASS - standalone watchdog executable
+PASS - standalone watchdog help
+PASS - standalone watchdog stale-session smoke
+PASS - heartbeat requires evaluator PASS
+PASS - watchdog requires evaluator PASS before pruning
+PASS - codex-spawn dry-run uses gpt-5.5 xhigh
+PASS - CODEX_MODEL env file valid
+PASS - forbid gpt-5.4
+PASS - forbid gpt-5.5-codex
+PASS - goal sessions directory writable
+PASS - register-goal usage errors
+PASS - register-goal creates BUILD_PLAN seed
+PASS - register-goal seeds PROGRESS.md and init.sh
+PASS - README documents watchdog, OpenClaw, and v2 loop
+PASS - session-start hook emits orientation
+PASS - pre-compact hook writes snapshot
+PASS - verify-gate-bash blocks sed without evidence
+PASS - verify-gate-bash allows read-only inspection
+PASS - verify-gate per-criterion blocks unproven pass
+PASS - verify-gate per-criterion allows pass after evidence
+PASS - heartbeat appends round telemetry
+PASS - watchdog --kick escalates at max-rounds
+PASS - settings.json wires SessionStart, PreCompact, and Bash gate
+PASS - new scripts executable
+PASS - .mcp.json valid with playwright wired
+PASS - contract-reviewer agent present with verdict tokens
+PASS - desktop rubric present with computer-use evidence contract
+PASS - evaluator reads calibration + interaction trace paths
+PASS - planner honors pinned rubric + contract-review handshake
+PASS - heartbeat blocks PASS without interaction evidence (frontend)
+PASS - heartbeat allows PASS with Playwright trace
+PASS - heartbeat allows PASS with computer-use session
+PASS - heartbeat always escalates (writes ESCALATION.md) at runaway cap
+PASS - register-goal --rubric pins and seeds round-1
+PASS - register-goal rejects unknown rubric
+PASS - calibrate-evaluator records operator override
+PASS - calibrate-evaluator skips when verdicts already match
+PASS - run-contract-review handles missing plan
+PASS - run-contract-review --dry-run reports invocation
+PASS - run-evaluator --dry-run reports invocation
+PASS - diff-rounds prints round comparison
+PASS - bench pilot present and well-formed
+PASS - bench-score compares two score files
+PASS - session-start surfaces calibration + pinned rubric
+PASS - rounds.json stamps model, rubric, and codex_model
+PASS - watchdog honors workspace round-budget file
+PASS - track-read recognizes round-N evidence shapes
+PASS - track-read skips non-evidence paths
+PASS - evaluator has Playwright MCP tools wired
+PASS - heartbeat accepts non-canonical playwright trace filename
+PASS - heartbeat accepts non-canonical computer-use log filename
+PASS - ralph-loop dry-run reports invocation
+PASS - ralph-loop refuses without test-results.json contract
+PASS - session-start surfaces NEXT_FINDINGS.md when present
+PASS - register-goal seeds AGENTS.md for Codex parity
+PASS - re-simplify list + status + restore round-trip
+PASS - re-simplify playwright-trace override disables interaction gate
+PASS - re-simplify unknown target rejected
+PASS - run-evaluator writes NEXT_FINDINGS.md on NEEDS_WORK
+PASS - CLAUDE.md leads with the harness, not with Discord
+PASS - docs/agent-sdk-equivalent.md present and complete
+PASS - bench-score reports a numeric delta
+PASS - re-simplify bash-gate override disables verify-gate-bash
+PASS - re-simplify session-start override skips orientation
+PASS - re-simplify pre-compact override skips snapshot
+PASS - re-simplify per-criterion-gate override falls back to session-level
+PASS - re-simplify evaluator override (risky) lets heartbeat allow without QA PASS
+PASS - planner agent documents contract-reviewer override
+PASS - slash commands ship for orient/blueprint/qa/simplify/bench/round
+PASS - run-evaluator mkdirs goal-state before invoking claude
+PASS - planner documents sprint-decomposition re-simplify override
+PASS - SDK example skeleton ships and parses
+PASS - README documents all six slash commands
+PASS - README reflects 76 PASS check count

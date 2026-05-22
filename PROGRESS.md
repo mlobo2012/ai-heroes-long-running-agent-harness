@@ -45,7 +45,22 @@ New primitives shipped:
 
 ## In progress
 
-(nothing — round 2 completed cleanly)
+(nothing — round 3 completed cleanly)
+
+### v0.5.2 round 3 (2026-05-22)
+
+Polish round. Closed the last two QA recommendations from round 2.
+
+- C22: `agents/planner.md` documents the sprint-decomposition
+  re-simplify target. All 8 targets now have first-class handling
+  (5 hook-wired, 2 planner-doc-wired, 1 with combined wiring + doc).
+- C23: `docs/sdk-example/` ships a runnable ~150-line Python
+  skeleton porting the evidence gate, heartbeat, and evaluator.
+- C24-C25: README updated with slash-command table and refreshed
+  PASS-check count.
+- C26: verify-install grew 76 -> 80, exit 0.
+
+rounds.json: 4 consecutive PASS verdicts.
 
 ### v0.5.0 round 2 (2026-05-22)
 

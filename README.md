@@ -202,7 +202,20 @@ scripts/bench-score.py /tmp/bench-baseline/.../bench-score.json /tmp/bench-w-ove
 
 ### Agent SDK equivalence
 
-`docs/agent-sdk-equivalent.md` maps every bash hook to its `PreToolUse` / `Stop` / `SessionStart` / `PreCompact` callback equivalent on the [Claude Agent SDK](https://docs.claude.com/en/docs/claude-code/sdk). Use this when you're not running Claude Code but want the same harness primitives.
+`docs/agent-sdk-equivalent.md` maps every bash hook to its `PreToolUse` / `Stop` / `SessionStart` / `PreCompact` callback equivalent on the [Claude Agent SDK](https://docs.claude.com/en/docs/claude-code/sdk). Use this when you're not running Claude Code but want the same harness primitives. A runnable Python skeleton lives under `docs/sdk-example/` to seed an SDK port.
+
+### Slash commands
+
+When the plugin is loaded, six slash commands are available inside the Claude Code session:
+
+| Command       | What it does |
+|---------------|--------------|
+| `/orient`     | Re-read BUILD_PLAN / PROGRESS / QA_REPORT / NEXT_FINDINGS / STEER / git log / smoke test. One-keystroke re-orientation. |
+| `/blueprint`  | Invoke the planner subagent against an operator goal. |
+| `/qa`         | Invoke the evaluator subagent against the current contract. |
+| `/simplify`   | Wrapper for `scripts/re-simplify.sh` with every target's effect documented inline. |
+| `/bench`      | Wrapper for `scripts/bench-harness.sh`. |
+| `/round N`    | List artifacts under round-N directories and diff against round-(N-1). |
 
 ---
 
@@ -309,9 +322,10 @@ The executor refuses `gpt-5.5-codex` and `gpt-5.4`. Both fail loud.
 "$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh"
 ```
 
-48 PASS checks, exit 0. OpenClaw is not required. Four codex-related
+76 PASS checks, exit 0. OpenClaw is not required. Four codex-related
 checks may FAIL on environments without `codex` and
-`~/.claude/codex-current-model.env`; that is expected.
+`~/.claude/codex-current-model.env`; that is expected — seed the env
+file with `CODEX_MODEL=gpt-5.5` to flip them green.
 
 ---
 
@@ -429,7 +443,7 @@ scripts/
   diff-rounds.sh                         # Markdown diff between any two rounds (verdicts, scores, artifacts)
   bench-harness.sh                       # Bench rig — runs a pilot end-to-end and writes a score JSON
   bench-score.py                         # Compares two score JSONs (e.g. upstream vs this harness)
-  verify-install.sh                      # 68 PASS checks
+  verify-install.sh                      # 76 PASS checks
 bench/
   pilots/express-server/                 # Starter pilot for the bench rig (small but real)
 docs/

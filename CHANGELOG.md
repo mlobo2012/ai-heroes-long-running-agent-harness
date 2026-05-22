@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.5.2 - 2026-05-22
+
+Round 3 polish. Closes the last two recommendations from the round-2
+QA report: `sprint-decomposition` planner-side handling and a
+runnable Agent SDK example. Updates README to reflect the v0.5.x
+surface (slash commands, 76 PASS count).
+
+### Planner doc for `sprint-decomposition` re-simplify
+
+`agents/planner.md` now documents the eighth re-simplify target. When
+the operator sets it, the planner collapses the Suggested Build Path
+section to a single bullet noting the override. This lets the
+operator bench whether forced sprint decomposition still earns its
+cost on the current model.
+
+### `docs/sdk-example/` — runnable Agent SDK skeleton
+
+Two files: `README.md` (what's wired, what's not, how to run) and
+`sdk_loop.py` (~150 lines that port the PreToolUse evidence gate,
+the Stop heartbeat, and a fresh-context evaluator query() call).
+Parses cleanly; mirrors every key contract token (`EVIDENCE_PATHS_READ`,
+round-N evidence paths, `test-results.json`, `QA_REPORT.md`,
+`fresh-context`). Skeleton on purpose — the README is explicit about
+what's left for a production port.
+
+### README freshness
+
+- Slash-command table added (`/orient`, `/blueprint`, `/qa`,
+  `/simplify`, `/bench`, `/round N`) with one-liner per command.
+- "48 PASS checks" / "68 PASS checks" stale references updated to
+  76 throughout.
+- SDK example linked from the agent-sdk-equivalent section.
+
+### verify-install: 76 -> 80 PASS
+
+Four new checks: `check_planner_documents_sprint_decomposition_override`,
+`check_sdk_example_present` (asserts the Python file parses),
+`check_readme_documents_slash_commands` (six greps),
+`check_readme_reflects_v05_check_count`.
+
+### Round 3 self-improvement record
+
+rounds.json now contains four consecutive PASS verdicts under
+rubric=library, model=claude-opus-4-7. The harness has graded itself
+four times running. This is the bar.
+
 ## 0.5.1 - 2026-05-22
 
 Round 2 of self-improvement. Round 1 (v0.5.0) closed the three

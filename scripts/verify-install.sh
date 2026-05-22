@@ -284,6 +284,27 @@ check_agent_sdk_doc_present() {
   done
 }
 
+check_planner_documents_sprint_decomposition_override() {
+  grep -q 'sprint-decomposition' "$PLUGIN_DIR/agents/planner.md" || return 1
+  grep -q 're-simplify' "$PLUGIN_DIR/agents/planner.md"
+}
+
+check_sdk_example_present() {
+  [ -f "$PLUGIN_DIR/docs/sdk-example/README.md" ] || return 1
+  [ -f "$PLUGIN_DIR/docs/sdk-example/sdk_loop.py" ] || return 1
+  python3 -c "import ast; ast.parse(open('$PLUGIN_DIR/docs/sdk-example/sdk_loop.py').read())" 2>/dev/null
+}
+
+check_readme_documents_slash_commands() {
+  for cmd in /orient /blueprint /qa /simplify /bench /round; do
+    grep -q "\\${cmd}" "$PLUGIN_DIR/README.md" || return 1
+  done
+}
+
+check_readme_reflects_v05_check_count() {
+  grep -q '76 PASS' "$PLUGIN_DIR/README.md"
+}
+
 check_re_simplify_bash_gate_override() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
@@ -1140,5 +1161,9 @@ check "re-simplify evaluator override (risky) lets heartbeat allow without QA PA
 check "planner agent documents contract-reviewer override" check_planner_documents_contract_reviewer_override
 check "slash commands ship for orient/blueprint/qa/simplify/bench/round" check_slash_commands_present
 check "run-evaluator mkdirs goal-state before invoking claude" check_run_evaluator_mkdirs_state_dir
+check "planner documents sprint-decomposition re-simplify override" check_planner_documents_sprint_decomposition_override
+check "SDK example skeleton ships and parses" check_sdk_example_present
+check "README documents all six slash commands" check_readme_documents_slash_commands
+check "README reflects 76 PASS check count" check_readme_reflects_v05_check_count
 
 exit "$failures"

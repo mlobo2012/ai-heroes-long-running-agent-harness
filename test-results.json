@@ -1,57 +1,33 @@
 {
   "criteria": [
     {
-      "id": "C13",
-      "description": "re-simplify bash-gate target disables verify-gate-bash",
-      "evidence_paths": ["evidence/round-2/c13-bash-gate-override.txt"],
+      "id": "C22",
+      "description": "planner agent documents the sprint-decomposition re-simplify override",
+      "evidence_paths": ["evidence/round-3/c22-sprint-decomposition.txt"],
       "passes": true
     },
     {
-      "id": "C14",
-      "description": "re-simplify session-start target makes session-start emit a skip notice and skip orientation",
-      "evidence_paths": ["evidence/round-2/c14-session-start-override.txt"],
+      "id": "C23",
+      "description": "docs/sdk-example/ ships a runnable Python skeleton that parses",
+      "evidence_paths": ["evidence/round-3/c23-sdk-example.txt"],
       "passes": true
     },
     {
-      "id": "C15",
-      "description": "re-simplify pre-compact target makes pre-compact emit a skip notice and write no snapshot",
-      "evidence_paths": ["evidence/round-2/c15-pre-compact-override.txt"],
+      "id": "C24",
+      "description": "README documents all six slash commands",
+      "evidence_paths": ["evidence/round-3/c24-readme-commands.txt"],
       "passes": true
     },
     {
-      "id": "C16",
-      "description": "re-simplify per-criterion-gate target makes verify-gate fall back to session-level",
-      "evidence_paths": ["evidence/round-2/c16-per-criterion-gate-override.txt"],
+      "id": "C25",
+      "description": "README PASS-check count updated to 76",
+      "evidence_paths": ["evidence/round-3/c25-readme-count.txt"],
       "passes": true
     },
     {
-      "id": "C17",
-      "description": "re-simplify contract-reviewer override is documented and surfaced",
-      "evidence_paths": ["evidence/round-2/c17-contract-reviewer-override.txt"],
-      "passes": true
-    },
-    {
-      "id": "C18",
-      "description": "re-simplify evaluator target makes heartbeat skip the QA_REPORT.md PASS requirement",
-      "evidence_paths": ["evidence/round-2/c18-evaluator-override.txt"],
-      "passes": true
-    },
-    {
-      "id": "C19",
-      "description": "slash commands ship for orient, blueprint, qa, simplify, bench, round",
-      "evidence_paths": ["evidence/round-2/c19-slash-commands.txt"],
-      "passes": true
-    },
-    {
-      "id": "C20",
-      "description": "bench rig runs against express-server pilot end-to-end (or records honest gap if claude CLI missing)",
-      "evidence_paths": ["evidence/round-2/c20-bench-real.txt"],
-      "passes": true
-    },
-    {
-      "id": "C21",
-      "description": "verify-install covers every C13-C20 wiring and stays green",
-      "evidence_paths": ["evidence/round-2/c21-verify-install.txt"],
+      "id": "C26",
+      "description": "verify-install grows to 80 checks covering C22-C25 and stays green",
+      "evidence_paths": ["evidence/round-3/c26-verify-install.txt"],
       "passes": true
     }
   ]
