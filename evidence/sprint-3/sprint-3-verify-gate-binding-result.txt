@@ -1,0 +1,46 @@
+Sprint 3 evidence -- S3_verify_gate_per_row_evidence_binding
+============================================================
+
+Acceptance criterion (verbatim):
+"verify-gate.sh requires that the evidence file path contains a token matching the row whose passes value flipped from false to true. Reading the wrong evidence does not unlock arbitrary rows. Closes matrix performance angle C4."
+
+Artefacts and line citations:
+  hooks/verify-gate.sh lines 5-7 state the strengthened contract.
+  hooks/verify-gate.sh lines 21-25 keep the existing non-empty evidence-log gate.
+  hooks/verify-gate.sh lines 28-29 run the binding check before consuming the log.
+  hooks/verify-gate.sh lines 49-56 extract rows from full JSON, row JSON, or arrays.
+  hooks/verify-gate.sh lines 59-70 read the old test-results.json from disk and map old rows by id.
+  hooks/verify-gate.sh lines 72-90 accept Write content and Edit new_string; Edit old_string/new_string replacements are synthesized against the old file.
+  hooks/verify-gate.sh lines 92-103 find rows whose passes value flipped from false to true.
+  hooks/verify-gate.sh lines 106-128 derive row tokens from id, id with hyphens, leading S<N>_ as sprint-<N>, and the sprint field.
+  hooks/verify-gate.sh lines 131-149 compare evidence-log path components against those tokens.
+  hooks/verify-gate.sh lines 151-163 emit a Claude hook block JSON naming unbound rows, consume the log, and exit 0.
+  hooks/verify-gate.sh lines 166-167 consume the log on allowed writes too.
+
+T1 -- Missing token blocks.
+  Fixture: old test-results.json had S3_verify_gate_per_row_evidence_binding
+  passes=false. The proposed Write content flipped it to passes=true. The
+  evidence log contained only evidence/sprint-5/sprint-5-result.txt.
+  Result: PASS. stdout was:
+    {"decision":"block","reason":"Cannot mark result row(s) passing without row-matched evidence Read this session: S3_verify_gate_per_row_evidence_binding"}
+  The evidence log was consumed to 0 bytes.
+
+T2 -- Matching token allows.
+  Same old/new fixture, but the evidence log contained
+  evidence/sprint-3/sprint-3-verify-gate-binding-result.txt.
+  Result: PASS. stdout was empty and the evidence log was consumed to 0 bytes.
+
+T3 -- Add-only/no-flip compatibility.
+  Fixture: old rows stayed passes=false and a new passes=false row was added.
+  The evidence log contained evidence/unrelated-result.txt.
+  Result: PASS. stdout was empty and the evidence log was consumed to 0 bytes,
+  preserving the existing "log must be non-empty" behavior when no row flips.
+
+T4 -- Partial Edit compatibility.
+  Fixture: hook input used old_string "\"passes\":false" and new_string
+  "\"passes\":true" rather than full Write content. The script synthesized the
+  post-edit JSON, found the S3 flip, matched evidence/sprint-3/edit-diff.patch,
+  allowed the edit, and consumed the log.
+  Result: PASS. stdout was empty and the evidence log was consumed to 0 bytes.
+
+Self-grade: PASS.

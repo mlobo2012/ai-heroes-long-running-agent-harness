@@ -1,0 +1,37 @@
+S11_rubric_template_and_one_concrete
+
+Acceptance criterion verbatim:
+- agents/rubrics/_template.md defines a rubric scaffold: named dimensions, weight per dimension (or equal), what counts as PASS per dimension, what counts as NEEDS_WORK. Markdown table or list. Frontmatter optional.
+- agents/rubrics/geo-article.md is a concrete example with dimensions like:
+  - Trust signals (E-E-A-T markers, citations)
+  - Information gain vs the SERP top 3
+  - Structured data / schema
+  - Word count + chunk extractability for AI search
+  - Author/date/freshness signals
+- agents/evaluator-strict.md adds a paragraph: "If the brief specifies a rubric path (e.g., `agents/rubrics/<slug>.md`), Read it BEFORE returning a verdict and grade each dimension explicitly. If you grade NEEDS_WORK, name the failing dimension(s)."
+
+File-and-line citations:
+- agents/rubrics/_template.md:12 defines the verdict rule; agents/rubrics/_template.md:20 starts the dimension table with Dimension, Weight, PASS, and NEEDS_WORK columns.
+- agents/rubrics/_template.md:22 through agents/rubrics/_template.md:26 define five equal-weight scaffold dimensions.
+- agents/rubrics/geo-article.md:19 starts the concrete GEO article rubric table.
+- agents/rubrics/geo-article.md:21 through agents/rubrics/geo-article.md:26 cover Trust signals, Information gain vs SERP top 3, Structured data and schema, Word count and chunk extractability, Author/date/freshness signals, and Conversion/reader utility.
+- agents/evaluator-strict.md:22 requires reading a named rubric path before verdict and naming failing dimensions on NEEDS_WORK.
+- scripts/verify-install.sh:232 through scripts/verify-install.sh:236 add the install check for both rubric files and the strict evaluator rubric-path contract.
+
+T1 spot-check:
+Command: bash -n tests/soak/soak.sh
+Output: exit 0.
+
+T2 spot-check:
+Command: test -f agents/rubrics/_template.md && test -f agents/rubrics/geo-article.md && (grep -q 'optional rubric' agents/evaluator-strict.md || grep -q 'rubric path' agents/evaluator-strict.md)
+Output: exit 0.
+
+T3 spot-check:
+Command: scripts/verify-install.sh --scope all
+Relevant output:
+PASS - rubric template and GEO example present
+PASS - reversibility docs present
+PASS - synthetic soak test present
+
+Self-grade:
+PASS. The template, concrete GEO rubric, evaluator contract text, and install verification check are present and cited.

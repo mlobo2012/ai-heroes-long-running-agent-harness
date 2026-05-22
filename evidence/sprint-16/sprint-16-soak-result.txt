@@ -1,0 +1,46 @@
+S16_soak_test_synthetic
+
+Acceptance criterion verbatim:
+- tests/soak/soak.sh runs in a mktemp scratchroot in seconds (not hours). Uses synthetic timestamps to simulate a 6-hour scenario:
+  - At simulated minute 0: workspace created, last-beat written.
+  - At simulated minute 30, 60: last-beat refreshed.
+  - At simulated minute 90: INJECTED HANG — last-beat NOT refreshed.
+  - At simulated minute 110 (20 min after the last refresh + injected hang): supervisor-runner.sh is invoked → must flag stalled.
+  - At simulated minute 120: workspace marks goal as complete.
+  - At simulated minute 130: supervisor-runner.sh invoked → must trim the session from active.jsonl + write completion log.
+- The test uses env-var overrides to point supervisor-runner at synthetic state (you built this pattern in tests/outer-pulse/*.sh — reuse).
+- Mock time by setting last-beat to an arbitrary computed Unix timestamp.
+- Assertions: exactly one stall alert in recovery log, exactly one completion line in completion log.
+- Clean up via trap.
+
+File-and-line citations:
+- tests/soak/soak.sh:7 through tests/soak/soak.sh:12 create and clean a mktemp scratchroot via trap.
+- tests/soak/soak.sh:33 through tests/soak/soak.sh:40 route workspace, ledger, recovery log, completion log, curl capture, and simulation log into scratch state.
+- tests/soak/soak.sh:49 through tests/soak/soak.sh:54 mock time by writing a computed Unix `last-beat`.
+- tests/soak/soak.sh:62 through tests/soak/soak.sh:74 simulate minute 0, 30, 60, and the minute-90 injected hang.
+- tests/soak/soak.sh:76 through tests/soak/soak.sh:85 invoke the real supervisor runner at simulated minute 110 using env-var overrides.
+- tests/soak/soak.sh:87 through tests/soak/soak.sh:100 assert one recovery line, one alert curl, the stalled event, and `sessions_stalled=1`.
+- tests/soak/soak.sh:103 through tests/soak/soak.sh:112 mark complete at minute 120 and invoke the runner at minute 130.
+- tests/soak/soak.sh:114 through tests/soak/soak.sh:127 assert one completion line, an empty active ledger, and `sessions_completed=1`.
+- tests/soak/soak.sh:129 through tests/soak/soak.sh:133 advance the synthetic six-hour horizon to minute 360 without sleeping.
+- scripts/verify-install.sh:245 through scripts/verify-install.sh:248 add the install check that the soak test exists, is executable, and parses with bash -n.
+
+T1 spot-check:
+Command: bash -n tests/soak/soak.sh
+Output: exit 0.
+
+T2 spot-check:
+Command: bash tests/soak/soak.sh
+Output: PASS - synthetic soak test
+
+T3 spot-check:
+Command: for t in tests/cap/*.sh tests/user-prompt-submit/*.sh tests/discord-notify/*.sh tests/scope-policy/*.sh tests/outer-pulse/*.sh tests/benchmarks/*.sh tests/init-workspace/*.sh tests/session-ledger/*.sh; do bash "$t"; done
+Output: all tests exited 0; observed PASS lines for cap, user-prompt-submit, discord-notify, scope-policy, outer-pulse, benchmark, init-workspace, and session-ledger suites.
+
+T4 spot-check:
+Command: scripts/verify-install.sh --scope all
+Relevant output:
+PASS - synthetic soak test present
+
+Self-grade:
+PASS. The soak test runs in seconds, uses synthetic timestamps and supervisor env overrides, injects one hang, observes one stall alert/recovery record, then observes one completion trim.

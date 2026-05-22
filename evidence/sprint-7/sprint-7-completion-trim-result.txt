@@ -1,0 +1,61 @@
+# S7_outer_pulse_trims_completed_test
+
+Acceptance criterion verbatim:
+"tests/outer-pulse/completion-trim.sh: synthetic completion test, confirm session is removed from active.jsonl and a completion log line is written."
+
+Detailed acceptance criterion verbatim:
+"tests/outer-pulse/completion-trim.sh does the following:
+1. Creates a fake active.jsonl with two sessions (so the test proves it removes the right one, not all).
+2. For session A: workspace has goal-state.json with "status": "complete".
+3. For session B: workspace has goal-state.json with "status": "running" and a fresh last-beat.
+4. Sets SUPERVISOR_ACTIVE_LEDGER, SUPERVISOR_COMPLETION_LOG.
+5. Invokes scripts/supervisor-runner.sh.
+6. Asserts: exit 0; the active ledger has exactly one line remaining (session B's); the completion log has exactly one JSON line for session A.
+7. Cleans up."
+
+File-and-line citations:
+- `scripts/supervisor-runner.sh:43-46` defines env overrides so the completion test never touches the live active ledger.
+- `scripts/supervisor-runner.sh:187-192` detects `goal-state.json` with `status == "complete"`.
+- `scripts/supervisor-runner.sh:204-218` writes one JSONL completion entry for the completed session.
+- `scripts/supervisor-runner.sh:242-253` atomically rewrites the active ledger after filtering completed sessions.
+- `tests/outer-pulse/completion-trim.sh:7-12` creates and cleans the mktemp scratchroot.
+- `tests/outer-pulse/completion-trim.sh:35-45` creates two synthetic sessions, with session A complete and session B running with a fresh last beat.
+- `tests/outer-pulse/completion-trim.sh:47-49` invokes the runner with synthetic active-ledger and completion-log overrides.
+- `tests/outer-pulse/completion-trim.sh:51-64` asserts one active ledger line remains for session B and one completion JSON line exists for session A.
+- `README.md:177-194` updates install-check counts and documents the runner/test presence checks.
+- `scripts/verify-install.sh:223-246` adds and runs installer checks for the executable runner and outer-pulse fixture tests.
+
+T1 spot-check:
+Command: `bash -n tests/outer-pulse/completion-trim.sh`
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: `bash tests/outer-pulse/completion-trim.sh`
+Output:
+```text
+PASS - outer pulse completion trim
+```
+
+T3 spot-check:
+Command: `bash -n scripts/supervisor-runner.sh`
+Output: no output; exit 0.
+
+T4 spot-check:
+Command: `grep -q 'supervisor-runner' README.md && echo 'README grep PASS'`
+Output:
+```text
+README grep PASS
+```
+
+T5 spot-check:
+Command: `scripts/verify-install.sh --scope all`
+Output excerpt:
+```text
+== core checks ==
+PASS - supervisor runner executable
+PASS - outer-pulse fixture tests present
+== setup checks ==
+PASS - goal-supervisor HEARTBEAT.md exists
+```
+
+Self-grade: PASS. The completion fixture proves only the completed session is removed, the running session remains active, and the completion log receives exactly one JSONL entry.

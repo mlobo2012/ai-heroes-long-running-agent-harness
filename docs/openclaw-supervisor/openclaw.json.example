@@ -1,0 +1,38 @@
+{
+  "_note": "Merge this object into the agents.list array of ~/.openclaw/openclaw.json. Back up the file first (cp ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.bak.pre-goal-supervisor.$(date +%Y%m%dT%H%M%SZ)). The heartbeat.every field controls how often the outer pulse wakes; the stall threshold itself lives in HEARTBEAT.md (default 20 minutes).",
+  "id": "goal-supervisor",
+  "name": "goal-supervisor",
+  "workspace": "/Users/marco/.openclaw/workspace-goal-supervisor",
+  "agentDir": "/Users/marco/.openclaw/agents/goal-supervisor/agent",
+  "model": {
+    "primary": "openai-codex/gpt-5.5",
+    "fallbacks": []
+  },
+  "thinkingDefault": "high",
+  "identity": {
+    "name": "Goal Supervisor",
+    "emoji": "🫠"
+  },
+  "subagents": {
+    "allowAgents": [
+      "goal-supervisor"
+    ],
+    "thinking": "low"
+  },
+  "tools": {
+    "profile": "full",
+    "deny": [
+      "cron"
+    ],
+    "elevated": {
+      "enabled": false
+    }
+  },
+  "agentRuntime": {
+    "id": "codex"
+  },
+  "heartbeat": {
+    "every": "15m",
+    "target": "none"
+  }
+}

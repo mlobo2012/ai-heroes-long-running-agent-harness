@@ -1,0 +1,13 @@
+PASS
+2026-05-22T09:39Z — evaluator agent (subagent_id aba4f0c9e8638426f), fresh-context grade of Sprint 0.
+
+Spec: S0_repo_reflects_installed_harness — public repo functional parity with installed plugin.
+
+Evidence verified:
+- hooks/hooks.json, bin/enable-for-launcher.sh, scripts/verify-install.sh are byte-identical to install dir (diff -q silent).
+- .claude-plugin/plugin.json: version 0.2.0, author is object form.
+- scripts/verify-install.sh: 17 check lines, ted-mosby launcher recognized.
+- README.md: --plugin-dir is the active form; Components section lists hooks/hooks.json; verify-install section claims 17 checks.
+- CHANGELOG.md: honest "## 0.2.0 — 2026-05-22" entry describing the sync.
+
+Tool uses: 5. Duration: 19s.

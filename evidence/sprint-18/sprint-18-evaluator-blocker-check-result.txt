@@ -1,0 +1,24 @@
+S18_evaluator_blocker_check
+
+Acceptance criterion verbatim:
+- Single paragraph added to agents/evaluator.md and agents/evaluator-strict.md. The paragraph names blockers.jsonl, names the open/triaged-without-evidence rule, and tells the evaluator to surface blocker IDs on NEEDS_WORK.
+- Single paragraph added to agents/codex-executor.md telling builders to use scripts/blocker-record.sh.
+
+File-and-line citations:
+- agents/evaluator.md:20 names scope_policy: production_hardening, blockers.jsonl, open/triaged without evidence, NEEDS_WORK, and blocker IDs.
+- agents/evaluator-strict.md:25 contains the same strict-evaluator blocker check.
+- agents/codex-executor.md:25 tells builders to record production blockers with scripts/blocker-record.sh and use blockers.jsonl rather than prose.
+
+T1 spot-check:
+Command: grep -q 'blockers.jsonl' agents/evaluator.md
+Output: exit 0.
+
+T2 spot-check:
+Command: grep -q 'blockers.jsonl' agents/evaluator-strict.md
+Output: exit 0.
+
+T3 spot-check:
+Command: grep -q 'blocker-record' agents/codex-executor.md
+Output: exit 0.
+
+Self-grade: PASS. The evaluator and builder contracts now mirror the production-hardening completion rule in prose.

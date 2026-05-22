@@ -1,0 +1,41 @@
+S18_docs_and_examples
+
+Acceptance criterion verbatim:
+- docs/scope-policies.md is the user-facing doc: when to use each mode, blocker schema, lifecycle, examples, troubleshooting.
+- docs/examples/production-hardening-prompt.md is a complete reference brief written in the project's spec style (objective, items in scope, files allowed/forbidden, acceptance, verification, definition of done). Uses a Discord-router-like example domain (auth, delivery, recovery).
+- README.md references both from a brief new subsection.
+
+File-and-line citations:
+- docs/scope-policies.md:19-28 explains when to use each policy.
+- docs/scope-policies.md:30-64 documents the blocker ledger schema and enums.
+- docs/scope-policies.md:65-93 gives record/update examples.
+- docs/scope-policies.md:95-127 documents the completion gate and blocker-gate snapshot.
+- docs/scope-policies.md:129-153 documents lifecycle and troubleshooting.
+- docs/examples/production-hardening-prompt.md:9-23 defines objective and production_hardening scope_policy.
+- docs/examples/production-hardening-prompt.md:25-56 covers in-scope items and blocker policy for auth, delivery, recovery.
+- docs/examples/production-hardening-prompt.md:58-75 lists allowed/forbidden files.
+- docs/examples/production-hardening-prompt.md:77-130 covers acceptance, verification, and definition of done.
+- README.md:56-69 adds the scope-policy subsection and links both docs.
+- README.md:192-211 updates verify-install counts and scope-policy checks.
+- README.md:351-359 lists the new scripts and docs in Components.
+- CHANGELOG.md:3-22 adds the 0.9.0 entry.
+- .claude-plugin/plugin.json:3 bumps the version to 0.9.0.
+
+T1 spot-check:
+Command: grep -q 'scope_policy' docs/scope-policies.md
+Output: exit 0.
+
+T2 spot-check:
+Command: grep -q 'production_hardening' docs/examples/production-hardening-prompt.md
+Output: exit 0.
+
+T3 spot-check:
+Command: grep -q 'scope-policies' README.md
+Output: exit 0.
+
+T4 spot-check:
+Command: scripts/verify-install.sh --scope all
+Output excerpt:
+PASS - scope-policy docs present
+
+Self-grade: PASS. The docs cover modes, schema, lifecycle, examples, troubleshooting, README references, changelog, and version bump.

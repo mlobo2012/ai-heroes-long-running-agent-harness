@@ -1,0 +1,60 @@
+Acceptance criterion verbatim:
+### S14_user_prompt_submit_hook
+- hooks/user-prompt-submit.sh reads stdin (JSON), checks STEER.md, and if non-empty emits:
+  ```
+  {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<STEER.md contents>"}}
+  ```
+  exiting 0. If STEER.md is missing or empty, emits nothing (exit 0).
+- The hook caps the surfaced content at a reasonable length (e.g., 8KB) and includes a brief header like [STEER.md, surfaced by user-prompt-submit hook].
+- Wired into hooks/hooks.json under UserPromptSubmit.
+- Unit test tests/user-prompt-submit/steer-surfacing.sh:
+  - With no STEER.md: hook prints nothing.
+  - With non-empty STEER.md: hook prints the JSON above with the contents.
+  - With STEER.md > 8KB: hook truncates and includes a truncation note.
+- scripts/verify-install.sh includes a small check that the hook exists and is executable.
+
+File-and-line citations:
+- hooks/user-prompt-submit.sh:9 reads stdin; lines 11-16 check STEER.md and exit cleanly when missing/empty or python3 is unavailable.
+- hooks/user-prompt-submit.sh:18-40 caps at 8192 bytes, adds the STEER.md header, emits UserPromptSubmit hookSpecificOutput JSON, and appends the truncation note.
+- hooks/hooks.json:14-20 wires UserPromptSubmit to hooks/user-prompt-submit.sh.
+- README.md:319-320 lists the hook in Components; README.md:339 documents UserPromptSubmit behavior and the 8KB cap.
+- scripts/verify-install.sh:94 requires UserPromptSubmit in hooks.json; line 106 requires user-prompt-submit.sh in commands; line 124 checks the script is executable.
+- tests/user-prompt-submit/steer-surfacing.sh:43-65 covers missing STEER.md, non-empty STEER.md JSON, and >8KB truncation.
+- CHANGELOG.md:17-21 records the 0.7.0 hook and unit coverage; .claude-plugin/plugin.json:3 bumps version to 0.7.0.
+
+T1 spot-check:
+$ bash -n hooks/user-prompt-submit.sh
+output: <none>; exit 0
+
+T2 spot-check:
+$ bash tests/user-prompt-submit/steer-surfacing.sh
+PASS user-prompt-submit STEER surfacing
+
+T3 spot-check:
+$ python3 -c "import json; d=json.load(open('hooks/hooks.json')); assert 'UserPromptSubmit' in d['hooks'], 'wiring missing'" && echo PASS
+PASS
+
+T4 spot-check:
+$ scripts/verify-install.sh --scope all
+== core checks ==
+PASS - plugin dir and plugin.json
+PASS - Claude plugin manifest validates
+PASS - plugin hooks config is discoverable
+PASS - hook scripts executable
+PASS - codex-spawn dry-run uses gpt-5.5 xhigh
+PASS - CODEX_MODEL env file valid
+PASS - forbid gpt-5.4
+PASS - forbid gpt-5.5-codex
+PASS - goal sessions active.jsonl exists
+PASS - register-goal usage errors
+PASS - Claude CLI supports --plugin-dir
+== setup checks ==
+PASS - goal-supervisor HEARTBEAT.md exists
+PASS - openclaw.json contains goal-supervisor
+PASS - openclaw.json backup exists
+PASS - enable-for-launcher dry-run does not edit
+PASS - launchers do not use obsolete --plugin flag
+PASS - router workers inherit harness plugin dir
+
+Self-grade:
+PASS. UserPromptSubmit now surfaces STEER.md promptly, is capped and wired, and verify-install validates the new hook shape.

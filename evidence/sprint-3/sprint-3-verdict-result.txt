@@ -1,0 +1,19 @@
+PASS
+2026-05-22T09:58Z — evaluator agent (subagent_id aa9367c5044570923), fresh-context grade of Sprint 3 (hooks hardening, 5 items).
+
+Spec: close traps D1, D7, D8, D10, D14 — hooks become workspace-rooted, count regex jq-anchored, register-goal dedupes, exit-code 5 documented.
+
+Evidence verified across 11 verification steps:
+- steer.sh line 15 default = ${AGENT_STEER_FILE:-${WORKDIR:-$PWD}/STEER.md}; lines 20-23 write the marker.
+- kill-switch.sh line 10 default = ${AGENT_STOP_FILE:-${WORKDIR:-$PWD}/AGENT_STOP}.
+- heartbeat-stop.sh lines 110-131 results_count function with jq + anchored-regex fallback; line 133 uses results_count == 0 for goal-met; SubagentStop short-circuit (92-95) intact; steered-this-turn marker check (144) intact.
+- discord-notify.sh lines 24-46 same results_count pattern; lines 48-49 invoke it for true/false counts.
+- register-goal.sh lines 112-185 both branches dedupe by workspace, atomic tmp+replace.
+- plugin.json version 0.4.0.
+- CHANGELOG 0.4.0 entry closes D1/D7/D8/D10/D14.
+- README line 306 documents exit code 5.
+- verify-install --scope all: exit 0, all 17 PASS.
+- Live dedupe simulation: same workspace → 1 line; different workspace → 2 lines.
+- Evidence file evidence/sprint-3/sprint-3-result.txt: all T1-T9 PASS.
+
+Tool uses: 13. Duration: 45s.

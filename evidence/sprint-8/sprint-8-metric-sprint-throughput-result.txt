@@ -1,0 +1,37 @@
+Acceptance criterion verbatim:
+S8_metric_sprint_throughput:
+- docs/benchmarks.md has a section "Sprint throughput" with at least 5 data points each for:
+  - Wall-time per inner-pulse cycle (Stop hook duration; can be computed from heartbeat-stop.log line timestamps if available, or from `.claude/goal-state/last-beat` deltas).
+  - Wall-time per Codex sprint (from codex-spawn-*.log file mtimes vs the next file's birth time, OR by parsing the log itself for OpenAI timing markers).
+- Be honest about data limits (small N, particular session).
+
+File-and-line citations:
+- docs/benchmarks.md:50 names the "Sprint throughput" section.
+- docs/benchmarks.md:52-55 discloses that heartbeat data is inter-pulse wall time, not hook CPU runtime, and reports 37 intervals with 112s median.
+- docs/benchmarks.md:57-68 provides 10 inner-pulse data points.
+- docs/benchmarks.md:70-72 explains Codex sprint duration source and reports 6 sprint logs with 591s median.
+- docs/benchmarks.md:74-81 provides 6 Codex sprint data points.
+- docs/benchmarks.md:83-86 records the small-N/session-specific data limit.
+- scripts/benchmark-collect.sh:77-120 collects Codex spawn timing, line counts, and median duration.
+- scripts/benchmark-collect.sh:123-165 collects heartbeat timestamps, inter-pulse intervals, and median interval.
+- tests/benchmarks/benchmark-collect.sh:58-70 asserts collector counts, median interval, evidence counts, and ratios on a synthetic fixture.
+
+T1 spot-check:
+Command: scripts/benchmark-collect.sh | python3 -c 'import json,sys; d=json.load(sys.stdin); print("codex_count", d["codex_sprints"]["count"]); print("codex_median", d["codex_sprints"]["median_duration_seconds"]); print("inner_count", d["inner_pulse"]["interval_count"]); print("inner_median", d["inner_pulse"]["median_interval_seconds"])'
+Output:
+codex_count 6
+codex_median 591.0
+inner_count 37
+inner_median 112
+
+T2 spot-check:
+Command: bash -n scripts/benchmark-collect.sh && bash tests/benchmarks/benchmark-collect.sh
+Output:
+PASS benchmark collector
+
+T3 spot-check:
+Command: grep -n 'Sprint throughput' docs/benchmarks.md
+Output:
+50:## Sprint throughput
+
+Self-grade: PASS.

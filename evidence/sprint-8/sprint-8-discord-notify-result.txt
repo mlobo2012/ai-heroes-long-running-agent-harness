@@ -1,0 +1,54 @@
+Acceptance criterion verbatim:
+### S4_discord_notify_real_post_or_honest_docs
+- hooks/discord-notify.sh adds an exponential-backoff retry loop around the existing curl POST. Recommended shape:
+  ```
+  attempts=0
+  max_attempts=${DISCORD_NOTIFY_MAX_ATTEMPTS:-3}
+  while [ $attempts -lt $max_attempts ]; do
+    if curl -fsS -X POST -H 'Content-Type: application/json' \
+      --max-time "${DISCORD_NOTIFY_TIMEOUT:-10}" \
+      -d "$payload" "$DISCORD_NOTIFY_WEBHOOK" >/dev/null 2>&1; then
+      ok=1; break
+    fi
+    sleep_for=$(( 2 ** attempts ))
+    sleep $sleep_for
+    attempts=$((attempts + 1))
+  done
+  if [ "${ok:-0}" -ne 1 ]; then
+    # dead-letter
+    printf '%s payload=%s\n' "$timestamp" "$payload" >> "$STATE_DIR/discord-notify-deadletter.log"
+  fi
+  ```
+- All env-var names (DISCORD_NOTIFY_WEBHOOK, DISCORD_NOTIFY_MAX_ATTEMPTS, DISCORD_NOTIFY_TIMEOUT, dead-letter path) documented in README.
+- README explicitly states: "Live Discord notifications require DISCORD_NOTIFY_WEBHOOK. Without it, the script writes to the local log only."
+- CHANGELOG 0.7.0 entry records the change.
+- The new unit test tests/discord-notify/retry-deadletter.sh confirms:
+  - Webhook unset → no curl, no dead-letter line.
+  - Webhook set to a 502-returning URL (or a known-bad host) → retry attempted, eventually dead-letter line written.
+  - Webhook set to a 200-returning URL (use a local netcat or 127.0.0.1:port fixture if curl-able; otherwise mock by intercepting curl with a function override) → success line written, no dead-letter.
+
+File-and-line citations:
+- hooks/discord-notify.sh:5 documents retry/backoff; lines 10-13 document env vars; line 23 sets .claude/goal-state/discord-notify-deadletter.log.
+- hooks/discord-notify.sh:129-170 gates live POST on DISCORD_NOTIFY_WEBHOOK, applies max attempts, exponential backoff, success logging, webhook-error logging, and dead-letter payload logging.
+- README.md:94-105 documents the live-notification gate, exact required sentence, retry/dead-letter behavior, env vars, and dead-letter path.
+- CHANGELOG.md:3-12 records 0.7.0 discord-notify retry/backoff/dead-letter closure; .claude-plugin/plugin.json:3 bumps version to 0.7.0.
+- tests/discord-notify/retry-deadletter.sh:21-48 installs fake curl/sleep fixtures; lines 87-111 cover unset webhook, failing webhook retries/dead-letter, and successful webhook/no-dead-letter.
+
+T1 spot-check:
+$ bash -n hooks/discord-notify.sh
+output: <none>; exit 0
+
+T2 spot-check:
+$ bash tests/discord-notify/retry-deadletter.sh
+PASS discord-notify retry and dead-letter
+
+T3 spot-check:
+$ grep -q 'DISCORD_NOTIFY_WEBHOOK' README.md && echo PASS
+PASS
+
+T4 spot-check:
+$ test ! -e .claude/goal-state/discord-notify-deadletter.log && echo 'no dead-letter in workspace'
+no dead-letter in workspace
+
+Self-grade:
+PASS. The real webhook branch is implemented with deterministic retry/dead-letter coverage and the README/CHANGELOG no longer describe discord-notify as a stub.

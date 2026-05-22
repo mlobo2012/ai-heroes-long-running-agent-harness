@@ -1,0 +1,40 @@
+S18_production_hardening_completion_gate
+
+Acceptance criterion verbatim:
+- hooks/heartbeat-stop.sh extension lands AFTER the existing results_count == 0 check but BEFORE the log_status "allow" "goal-met". Read scope_policy from test-results.json. If production_hardening:
+  - Read blockers.jsonl, fold lines to latest-per-id.
+  - Count records where status == open OR (status == triaged AND evidence_paths == []).
+  - If count > 0, do NOT log goal-met; continue to the regular block path (still log a structured note).
+- Always write .claude/goal-state/blocker-gate.json snapshot:
+  {"policy": "...", "open_count": N, "triaged_unevidenced_count": M, "decision": "allow|block", "timestamp": "..."}
+- fixed_scope and research_only: skip the check; write a snapshot with decision: "skip" and policy: "<value>".
+
+File-and-line citations:
+- hooks/heartbeat-stop.sh:139-190 writes blocker-gate.json and returns decision/counts.
+- hooks/heartbeat-stop.sh:155-179 folds blockers.jsonl latest-wins and counts open plus triaged-without-evidence records.
+- hooks/heartbeat-stop.sh:181-188 writes the required snapshot fields.
+- hooks/heartbeat-stop.sh:193-205 places the check after results_count false == 0 and before goal-met.
+- hooks/heartbeat-stop.sh:199-200 logs the structured blocker-gate note instead of goal-met when blocked.
+- hooks/heartbeat-stop.sh:231-235 is the regular block path reached after a blocker gate block.
+
+T1 spot-check:
+Command: bash tests/scope-policy/prod-hardening-open-blocks.sh
+Output:
+PASS - production_hardening blocks on open blockers
+
+T2 spot-check:
+Command: bash tests/scope-policy/prod-hardening-triaged-no-evidence.sh
+Output:
+PASS - production_hardening blocks on triaged blockers without evidence
+
+T3 spot-check:
+Command: bash tests/scope-policy/prod-hardening-completes-when-clean.sh
+Output:
+PASS - production_hardening completes when blockers are resolved with evidence
+
+T4 spot-check:
+Command: bash tests/scope-policy/research-only-records-but-allows.sh
+Output:
+PASS - research_only records blockers but does not block completion
+
+Self-grade: PASS. The hook preserves the old all-green exit for skipped policies, writes the audit snapshot, and diverts production-hardening blockers through the existing block-counter path.

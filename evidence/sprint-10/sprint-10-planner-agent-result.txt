@@ -1,0 +1,26 @@
+Acceptance criterion verbatim:
+
+S10_planner_agent_optional:
+- `agents/planner.md` frontmatter: `name: planner`, `description: ...`, `tools: Read, Glob, Grep, Write`.
+- The prose contract describes how to expand a 1-line goal into a BUILD_PLAN.md and to seed `test-results.json` with one item per feature/sub-deliverable.
+- The agent does NOT auto-run; it's available as a subagent_type for orchestrators that opt in.
+- No unit test required (it's an LLM agent definition, not code).
+
+File-and-line citations:
+- agents/planner.md:1-5 defines the required frontmatter, including `name: planner` and `tools: Read, Glob, Grep, Write`.
+- agents/planner.md:13-22 defines the planning contract: read a one-line goal, write `BUILD_PLAN.md`, and seed `test-results.json` with one false row per feature or sub-deliverable.
+- agents/planner.md:28-40 documents the default-fail JSON item shape.
+- agents/planner.md:42 states the planner does not auto-run and is only available to orchestrators that opt in.
+- README.md:220-222 documents the verify-install planner check.
+- README.md:364 lists `agents/planner.md` in the component map.
+
+T1 spot-check:
+Command: `test -f agents/planner.md && grep -q 'tools:' agents/planner.md`
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: `scripts/verify-install.sh --scope all`
+Output included: `PASS - optional planner agent present`
+
+Self-grade:
+PASS. The optional planner definition exists, has the requested tool grant, describes BUILD_PLAN/test-results seeding, and makes opt-in/non-auto-run behavior explicit.

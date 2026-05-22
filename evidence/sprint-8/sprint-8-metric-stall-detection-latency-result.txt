@@ -1,0 +1,30 @@
+Acceptance criterion verbatim:
+S8_metric_stall_detection_latency:
+- docs/benchmarks.md has a section "Stall detection latency" that:
+  - States the upstream baseline: no outer supervisor → stall detection is ∞ (only manual operator notices).
+  - States this harness's behaviour: outer pulse fires within 20 minutes (configurable threshold).
+  - States the 150% framing honestly: it's the difference between "recovery possible" and "recovery impossible," not a 2× speedup of the same task. Show the cost math: cost of an undetected 12-hour stall vs cost of a 20-minute stall + recovery.
+
+File-and-line citations:
+- docs/benchmarks.md:14 names the "Stall detection latency" section.
+- docs/benchmarks.md:16-18 states the upstream no-supervisor baseline as unbounded/infinity and manual-operator-only detection.
+- docs/benchmarks.md:20-23 states the 20-minute configured threshold behavior.
+- docs/benchmarks.md:25-29 frames "150%" as recovery-possible vs recovery-impossible, not a normal speedup ratio.
+- docs/benchmarks.md:31-45 shows 12-hour undetected stall cost vs 20-minute stall plus recovery cost.
+
+T1 spot-check:
+Command: grep -n 'Stall detection latency\|Sprint throughput\|Evidence-gate enforcement' docs/benchmarks.md
+Output:
+14:## Stall detection latency
+50:## Sprint throughput
+88:## Evidence-gate enforcement
+
+T2 spot-check:
+Command: sed -n '16,29p' docs/benchmarks.md
+Output captured in file citations above: upstream is infinity/manual-operator-only; harness uses a 20-minute threshold; 150% is robustness framing.
+
+T3 spot-check:
+Command: sed -n '31,45p' docs/benchmarks.md
+Output captured in file citations above: cost math includes 12h*C, (20m/60m)*C + R, and a worked $100/hour example.
+
+Self-grade: PASS.

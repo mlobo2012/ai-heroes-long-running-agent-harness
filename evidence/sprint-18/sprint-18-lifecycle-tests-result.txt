@@ -1,0 +1,40 @@
+S18_lifecycle_tests
+
+Acceptance criterion verbatim:
+- All six tests under tests/scope-policy/ exist, are executable, and pass. Each uses a mktemp scratchroot and cleans up via trap.
+- fixed-scope-unchanged.sh - no scope_policy field: even with blockers in ledger, completion is decided only by passes-booleans (current behaviour).
+- prod-hardening-open-blocks.sh - all rows passes:true, one blocker with status: open -> goal NOT met.
+- prod-hardening-triaged-no-evidence.sh - all rows passes:true, one blocker with status: triaged, evidence_paths: [] -> goal NOT met.
+- prod-hardening-completes-when-clean.sh - all rows passes:true, one blocker resolved with evidence -> goal IS met.
+- research-only-records-but-allows.sh - all rows passes:true, multiple open blockers -> goal IS met (records but does not block).
+- evidence-gating-still-works.sh - synthesize a passes:false-to-passes:true Edit, confirm verify-gate per-row binding still fires (existing behaviour unbroken by the scope-policy work).
+
+File-and-line citations:
+- tests/scope-policy/fixed-scope-unchanged.sh:6-12 uses mktemp and trap; lines 23-41 assert missing scope_policy skips blockers and allows goal-met.
+- tests/scope-policy/prod-hardening-open-blocks.sh:7-12 uses mktemp and trap; lines 23-45 assert an open blocker blocks.
+- tests/scope-policy/prod-hardening-triaged-no-evidence.sh:8-13 uses mktemp and trap; lines 24-44 assert triaged without evidence blocks.
+- tests/scope-policy/prod-hardening-completes-when-clean.sh:8-13 uses mktemp and trap; lines 24-47 assert resolved with evidence allows.
+- tests/scope-policy/research-only-records-but-allows.sh:7-12 uses mktemp and trap; lines 23-45 assert research_only records open blockers and allows.
+- tests/scope-policy/evidence-gating-still-works.sh:6-11 uses mktemp and trap; lines 23-59 synthesize the verify-gate Edit and assert row binding still blocks unrelated evidence and allows matched evidence.
+- scripts/verify-install.sh:273-287 validates all six tests are present and executable.
+
+T1 spot-check:
+Command: for t in tests/scope-policy/*.sh; do bash -n "$t"; done
+Output: exit 0.
+
+T2 spot-check:
+Command: for t in tests/scope-policy/*.sh; do bash "$t"; done
+Output:
+PASS - verify-gate row binding still works
+PASS - fixed_scope missing field preserves existing completion behavior
+PASS - production_hardening completes when blockers are resolved with evidence
+PASS - production_hardening blocks on open blockers
+PASS - production_hardening blocks on triaged blockers without evidence
+PASS - research_only records blockers but does not block completion
+
+T3 spot-check:
+Command: scripts/verify-install.sh --scope all
+Output excerpt:
+PASS - scope-policy lifecycle tests present
+
+Self-grade: PASS. All six lifecycle tests exist, are executable, use scratchroots with traps, and pass.
