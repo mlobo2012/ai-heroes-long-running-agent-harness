@@ -598,6 +598,17 @@ rm -rf "$HOME/.openclaw/agents/goal-supervisor"
 
 ---
 
+## Archived branches
+
+The lean v1.0.0 on `main` is canonical. A richer reconciled variant — slash commands (`blueprint`, `round`, `qa`, `orient`, `simplify`, `bench`), `contract-reviewer` agent, the four-axis rubric library, `ralph-loop.sh`, the goal watchdog, an SDK port, and a bench rig — was explored on `claude/klaus-1.0.0-reconciled` and is preserved on the public repo as:
+
+- `archive/klaus-1.0.0-reconciled-2026-05-22` — the published reconciled SHA with the full rich-harness feature set.
+- `archive/klaus-1.0.0-reconciled-local-2026-05-22` — the alternative local layering attempt.
+
+These are reference-only. They are not installable and not part of the v1.0.0 contract. Cherry-pick into a future minor/major if specific features earn real demand.
+
+---
+
 ## Credits
 
 Built on Anthropic's published work:
