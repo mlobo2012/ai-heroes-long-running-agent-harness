@@ -29,3 +29,9 @@ computer-use/
 # Private working notes (live only in the internal mirror)
 INTERNAL.md
 .context/
+
+# Local dashboard deployment secrets
+dashboard/.env*
+!dashboard/.env.example
+dashboard/node_modules/
+dashboard/.publisher.*
