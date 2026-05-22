@@ -1,0 +1,83 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index d38a66a..1ac6ab9 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,13 @@
+ # Changelog
+ 
++## 0.14.0 — 2026-05-22
++
++Heartbeat-during-spawn coverage for long Codex executor runs.
++
++- Added the `spawn-active` heartbeat source so `codex-spawn.sh` keeps
++  `.claude/goal-state/last-beat` fresh while Codex is still running, plus
++  dashboard source reporting and Discord launcher plugin-wiring audit coverage.
++
+ ## 0.13.0 — 2026-05-22
+ 
+ Final gate documentation and install sync. Closes the Sprint 1 parity rollup,
+diff --git a/README.md b/README.md
+index d28a144..8ee2741 100644
+--- a/README.md
++++ b/README.md
+@@ -26,6 +26,11 @@ The fix is a second timer at a different cadence. One drives the loop. One watch
+ 
+ The outer pulse only intervenes when state goes stale. It is the safety net, not the engine.
+ 
++Heartbeat state has two explicit sources. `stop-hook` means a `Stop` or
++`SubagentStop` hook reached `hooks/heartbeat-stop.sh` at a turn boundary.
++`spawn-active` means `bin/codex-spawn.sh` has a live Codex child process and
++is refreshing `.claude/goal-state/last-beat` before the parent turn ends.
++
+ ## How it works (first principles)
+ 
+ ```
+@@ -228,6 +233,15 @@ exec claude \
+   # ...your other flags
+ ```
+ 
++### Discord launcher audit
++
++Run `scripts/audit-discord-launchers.sh` whenever a Discord agent launcher is
++added, or any time `Stop`/`SubagentStop` hooks appear not to be firing. It
++checks executable `~/.claude/channels/discord/start-*.sh` files for the harness
++plugin wiring. The canonical fix is to pass
++`--plugin-dir /Users/marco/.claude/plugins/discord-long-running-harness` to
++the `claude` invocation.
++
+ ### Pin the Codex model
+ 
+ The Codex executor reads a single env file. Create it:
+@@ -434,12 +448,14 @@ bin/
+   codex-spawn.sh                         # Reads pinned CODEX_MODEL, invokes codex exec
+   enable-for-launcher.sh                 # Safe rollout helper (dry-run by default, --plugin-dir aware)
+ scripts/
++  spawn-heartbeat.sh                     # Refreshes last-beat + spawn-active.json during Codex spawns
+   init-workspace.sh                      # Seeds PROGRESS.md, test-results.json, STEER.md, goal-state, and initial commit
+   register-goal.sh                       # Registers an active goal session
+   blocker-record.sh                      # Appends open production blockers to .claude/goal-state/blockers.jsonl
+   blocker-update.sh                      # Appends latest-wins blocker status updates
+   benchmark-collect.sh                   # Emits JSON for docs/benchmarks.md
+   sync-to-install.sh                     # Mirrors package files into the installed plugin
++  audit-discord-launchers.sh             # Audits Discord launchers for --plugin-dir wiring
+   audit-readme.sh                        # Checks capability map and local README links
+   verify-install.sh                      # 28 core checks + 6 setup checks; --scope core|setup|all
+ docs/
+diff --git a/docs/observability.md b/docs/observability.md
+index ba2d96b..0111f00 100644
+--- a/docs/observability.md
++++ b/docs/observability.md
+@@ -12,6 +12,13 @@ tail -F .claude/goal-state/heartbeat-stop.log .claude/goal-state/discord-notify.
+ 
+ This surfaces every `Stop` decision, `SubagentStop` heartbeat tick, sprint pass notification, and goal-complete notification. It is most useful when a session appears silent in the chat UI but the hook chain is still active.
+ 
++During a long Codex executor run, also inspect
++`.claude/goal-state/spawn-active.json`. Its schema is
++`{"pid":<int>,"started_at":"<iso8601>","last_refreshed":"<iso8601>","command":"codex"}`.
++In the tmux layout, a quiet Panel 1 plus a fresh `last_refreshed` means the
++parent turn has not ended yet, but the Codex child is still refreshing the
++inner pulse.
++
+ Panel 2: current PASS/FAIL split in `test-results.json`.
+ 
+ ```bash

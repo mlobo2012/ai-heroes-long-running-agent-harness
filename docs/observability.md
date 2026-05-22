@@ -12,6 +12,13 @@ tail -F .claude/goal-state/heartbeat-stop.log .claude/goal-state/discord-notify.
 
 This surfaces every `Stop` decision, `SubagentStop` heartbeat tick, sprint pass notification, and goal-complete notification. It is most useful when a session appears silent in the chat UI but the hook chain is still active.
 
+During a long Codex executor run, also inspect
+`.claude/goal-state/spawn-active.json`. Its schema is
+`{"pid":<int>,"started_at":"<iso8601>","last_refreshed":"<iso8601>","command":"codex"}`.
+In the tmux layout, a quiet Panel 1 plus a fresh `last_refreshed` means the
+parent turn has not ended yet, but the Codex child is still refreshing the
+inner pulse.
+
 Panel 2: current PASS/FAIL split in `test-results.json`.
 
 ```bash

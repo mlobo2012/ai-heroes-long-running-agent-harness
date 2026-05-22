@@ -360,6 +360,16 @@ function statusTone(state) {
   return "complete";
 }
 
+function validDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function ageSeconds(now, date) {
+  return Math.max(0, Math.round((now - date) / 1000));
+}
+
 export async function readActiveSessions(ledgerPath = defaultActiveLedger) {
   return parseJsonLines(await readText(ledgerPath, ""));
 }
@@ -383,6 +393,10 @@ export async function collectWorkspaceState(session) {
   const lastBeatRaw = (await readText(statePath(workspace, "last-beat"), "")).trim();
   const lastBeatEpoch = Number(lastBeatRaw);
   const lastBeatAt = Number.isFinite(lastBeatEpoch) && lastBeatEpoch > 0 ? new Date(lastBeatEpoch * 1000) : null;
+  const spawnActive = await readJson(statePath(workspace, "spawn-active.json"), null);
+  const spawnRefreshedAt = validDate(spawnActive?.last_refreshed);
+  const spawnAgeSeconds = spawnRefreshedAt ? ageSeconds(now, spawnRefreshedAt) : null;
+  const spawnHeartbeatFresh = spawnAgeSeconds !== null && spawnAgeSeconds <= 300;
   const branch = await git(workspace, ["rev-parse", "--abbrev-ref", "HEAD"], "unknown");
   const head = await git(workspace, ["log", "-1", "--format=%h%x09%s%x09%cr"], "");
   const statusText = await git(workspace, ["status", "--short"], "");
@@ -429,11 +443,21 @@ export async function collectWorkspaceState(session) {
       scopePolicy: results.scope_policy || goalState.scope_policy || "fixed_scope",
     },
     heartbeat: {
-      lastBeatAt: lastBeatAt?.toISOString() || null,
-      ageSeconds: lastBeatAt ? Math.max(0, Math.round((now - lastBeatAt) / 1000)) : null,
-      lastStatus: (await readText(statePath(workspace, "last-status"), "")).trim() || null,
+      lastBeatAt: spawnHeartbeatFresh ? spawnActive.last_refreshed : lastBeatAt?.toISOString() || null,
+      ageSeconds: spawnHeartbeatFresh ? spawnAgeSeconds : lastBeatAt ? ageSeconds(now, lastBeatAt) : null,
+      lastStatus: spawnHeartbeatFresh ? "active" : (await readText(statePath(workspace, "last-status"), "")).trim() || null,
+      source: spawnHeartbeatFresh ? "spawn-active" : lastBeatAt ? "stop-hook" : null,
       blockCount: (await readText(statePath(workspace, "block-count"), "")).trim() || null,
       tail: (await readText(statePath(workspace, "heartbeat-stop.log"), "")).split(/\r?\n/).filter(Boolean).slice(-10),
+      ...(spawnHeartbeatFresh
+        ? {
+            spawn: {
+              pid: spawnActive.pid ?? null,
+              started_at: spawnActive.started_at ?? null,
+              command: spawnActive.command ?? null,
+            },
+          }
+        : {}),
     },
     tests: {
       total: items.length,

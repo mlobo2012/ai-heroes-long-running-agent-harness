@@ -1,0 +1,4 @@
+LIVE spawn-active.json exit=0
+{"pid":74626,"started_at":"2026-05-22T17:53:40Z","last_refreshed":"2026-05-22T17:53:40Z","command":"codex"}
+AFTER exit=0 spawn-active ls:
+ls: /var/folders/89/yfgyv9vs6ds4shq035nfdjc40000gn/T//heartbeat-spawn-refresh.lF0K9c/case-0/workspace/.claude/goal-state/spawn-active.json: No such file or directory

@@ -1,0 +1,7 @@
+supervisor-runner: sessions_seen=1 sessions_stalled=0 sessions_completed=0 sessions_ok=1 webhook_posts=0 webhook_failures=0
+RECOVERY_LOG:
+(absent)
+WEBHOOK_CAPTURE:
+(absent)
+PASS - supervisor does not false-stall a workspace with fresh spawn heartbeat
+EXIT_CODE=0

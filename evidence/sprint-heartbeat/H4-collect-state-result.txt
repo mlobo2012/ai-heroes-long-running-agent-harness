@@ -1,0 +1,3 @@
+PASS - collect-state uses fresh spawn-active heartbeat
+PASS - collect-state preserves stop-hook heartbeat path
+EXIT_CODE=0

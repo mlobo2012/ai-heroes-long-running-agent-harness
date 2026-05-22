@@ -1,0 +1,921 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index d38a66a..1ac6ab9 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,13 @@
+ # Changelog
+ 
++## 0.14.0 — 2026-05-22
++
++Heartbeat-during-spawn coverage for long Codex executor runs.
++
++- Added the `spawn-active` heartbeat source so `codex-spawn.sh` keeps
++  `.claude/goal-state/last-beat` fresh while Codex is still running, plus
++  dashboard source reporting and Discord launcher plugin-wiring audit coverage.
++
+ ## 0.13.0 — 2026-05-22
+ 
+ Final gate documentation and install sync. Closes the Sprint 1 parity rollup,
+diff --git a/README.md b/README.md
+index d28a144..8ee2741 100644
+--- a/README.md
++++ b/README.md
+@@ -26,6 +26,11 @@ The fix is a second timer at a different cadence. One drives the loop. One watch
+ 
+ The outer pulse only intervenes when state goes stale. It is the safety net, not the engine.
+ 
++Heartbeat state has two explicit sources. `stop-hook` means a `Stop` or
++`SubagentStop` hook reached `hooks/heartbeat-stop.sh` at a turn boundary.
++`spawn-active` means `bin/codex-spawn.sh` has a live Codex child process and
++is refreshing `.claude/goal-state/last-beat` before the parent turn ends.
++
+ ## How it works (first principles)
+ 
+ ```
+@@ -228,6 +233,15 @@ exec claude \
+   # ...your other flags
+ ```
+ 
++### Discord launcher audit
++
++Run `scripts/audit-discord-launchers.sh` whenever a Discord agent launcher is
++added, or any time `Stop`/`SubagentStop` hooks appear not to be firing. It
++checks executable `~/.claude/channels/discord/start-*.sh` files for the harness
++plugin wiring. The canonical fix is to pass
++`--plugin-dir /Users/marco/.claude/plugins/discord-long-running-harness` to
++the `claude` invocation.
++
+ ### Pin the Codex model
+ 
+ The Codex executor reads a single env file. Create it:
+@@ -434,12 +448,14 @@ bin/
+   codex-spawn.sh                         # Reads pinned CODEX_MODEL, invokes codex exec
+   enable-for-launcher.sh                 # Safe rollout helper (dry-run by default, --plugin-dir aware)
+ scripts/
++  spawn-heartbeat.sh                     # Refreshes last-beat + spawn-active.json during Codex spawns
+   init-workspace.sh                      # Seeds PROGRESS.md, test-results.json, STEER.md, goal-state, and initial commit
+   register-goal.sh                       # Registers an active goal session
+   blocker-record.sh                      # Appends open production blockers to .claude/goal-state/blockers.jsonl
+   blocker-update.sh                      # Appends latest-wins blocker status updates
+   benchmark-collect.sh                   # Emits JSON for docs/benchmarks.md
+   sync-to-install.sh                     # Mirrors package files into the installed plugin
++  audit-discord-launchers.sh             # Audits Discord launchers for --plugin-dir wiring
+   audit-readme.sh                        # Checks capability map and local README links
+   verify-install.sh                      # 28 core checks + 6 setup checks; --scope core|setup|all
+ docs/
+diff --git a/bin/codex-spawn.sh b/bin/codex-spawn.sh
+index b27fb9a..ee0ba86 100755
+--- a/bin/codex-spawn.sh
++++ b/bin/codex-spawn.sh
+@@ -2,6 +2,10 @@
+ set -euo pipefail
+ # AI Heroes / Marco - discord-long-running-harness
+ 
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
++PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
++HEARTBEAT_HELPER="$PLUGIN_DIR/scripts/spawn-heartbeat.sh"
++
+ DRY_RUN=0
+ if [ "${1:-}" = "--dry-run" ]; then
+   DRY_RUN=1
+@@ -48,10 +52,62 @@ if [ "$DRY_RUN" -eq 1 ]; then
+   exit 0
+ fi
+ 
+-exec codex exec \
++codex_pid=""
++heartbeat_pid=""
++
++cleanup_heartbeat() {
++  set +e
++  if [ -n "$heartbeat_pid" ] && kill -0 "$heartbeat_pid" 2>/dev/null; then
++    kill "$heartbeat_pid" 2>/dev/null || true
++    wait "$heartbeat_pid" 2>/dev/null || true
++  fi
++}
++
++forward_signal() {
++  signal="$1"
++  trap - EXIT INT TERM
++  set +e
++  if [ -n "$codex_pid" ] && kill -0 "$codex_pid" 2>/dev/null; then
++    kill "-$signal" "$codex_pid" 2>/dev/null || true
++  fi
++  cleanup_heartbeat
++  if [ "$signal" = "INT" ]; then
++    exit 130
++  fi
++  exit 143
++}
++
++trap cleanup_heartbeat EXIT
++trap 'forward_signal INT' INT
++trap 'forward_signal TERM' TERM
++
++codex exec \
+   -m "$CODEX_MODEL" \
+   -c model_reasoning_effort=xhigh \
+   --dangerously-bypass-approvals-and-sandbox \
+   -C "$WORKDIR" \
+   --skip-git-repo-check \
+-  "$PROMPT"
++  "$PROMPT" &
++codex_pid="$!"
++
++STATE_DIR="$WORKDIR/.claude/goal-state"
++if [ -d "$STATE_DIR" ] && [ -x "$HEARTBEAT_HELPER" ]; then
++  heartbeat_args=("$codex_pid" "$STATE_DIR" --command codex)
++  if [ -n "${CODEX_SPAWN_HEARTBEAT_INTERVAL:-}" ]; then
++    heartbeat_args+=(--interval "$CODEX_SPAWN_HEARTBEAT_INTERVAL")
++  fi
++  if [ -n "${CODEX_SPAWN_HEARTBEAT_MAX_RUNTIME:-}" ]; then
++    heartbeat_args+=(--max-runtime "$CODEX_SPAWN_HEARTBEAT_MAX_RUNTIME")
++  fi
++  "$HEARTBEAT_HELPER" "${heartbeat_args[@]}" &
++  heartbeat_pid="$!"
++fi
++
++set +e
++wait "$codex_pid"
++codex_status="$?"
++set -e
++
++cleanup_heartbeat
++trap - EXIT INT TERM
++exit "$codex_status"
+diff --git a/dashboard/lib/collect-state.mjs b/dashboard/lib/collect-state.mjs
+index ff1f060..3f91349 100644
+--- a/dashboard/lib/collect-state.mjs
++++ b/dashboard/lib/collect-state.mjs
+@@ -360,6 +360,16 @@ function statusTone(state) {
+   return "complete";
+ }
+ 
++function validDate(value) {
++  if (!value) return null;
++  const date = new Date(value);
++  return Number.isNaN(date.getTime()) ? null : date;
++}
++
++function ageSeconds(now, date) {
++  return Math.max(0, Math.round((now - date) / 1000));
++}
++
+ export async function readActiveSessions(ledgerPath = defaultActiveLedger) {
+   return parseJsonLines(await readText(ledgerPath, ""));
+ }
+@@ -383,6 +393,10 @@ export async function collectWorkspaceState(session) {
+   const lastBeatRaw = (await readText(statePath(workspace, "last-beat"), "")).trim();
+   const lastBeatEpoch = Number(lastBeatRaw);
+   const lastBeatAt = Number.isFinite(lastBeatEpoch) && lastBeatEpoch > 0 ? new Date(lastBeatEpoch * 1000) : null;
++  const spawnActive = await readJson(statePath(workspace, "spawn-active.json"), null);
++  const spawnRefreshedAt = validDate(spawnActive?.last_refreshed);
++  const spawnAgeSeconds = spawnRefreshedAt ? ageSeconds(now, spawnRefreshedAt) : null;
++  const spawnHeartbeatFresh = spawnAgeSeconds !== null && spawnAgeSeconds <= 300;
+   const branch = await git(workspace, ["rev-parse", "--abbrev-ref", "HEAD"], "unknown");
+   const head = await git(workspace, ["log", "-1", "--format=%h%x09%s%x09%cr"], "");
+   const statusText = await git(workspace, ["status", "--short"], "");
+@@ -429,11 +443,21 @@ export async function collectWorkspaceState(session) {
+       scopePolicy: results.scope_policy || goalState.scope_policy || "fixed_scope",
+     },
+     heartbeat: {
+-      lastBeatAt: lastBeatAt?.toISOString() || null,
+-      ageSeconds: lastBeatAt ? Math.max(0, Math.round((now - lastBeatAt) / 1000)) : null,
+-      lastStatus: (await readText(statePath(workspace, "last-status"), "")).trim() || null,
++      lastBeatAt: spawnHeartbeatFresh ? spawnActive.last_refreshed : lastBeatAt?.toISOString() || null,
++      ageSeconds: spawnHeartbeatFresh ? spawnAgeSeconds : lastBeatAt ? ageSeconds(now, lastBeatAt) : null,
++      lastStatus: spawnHeartbeatFresh ? "active" : (await readText(statePath(workspace, "last-status"), "")).trim() || null,
++      source: spawnHeartbeatFresh ? "spawn-active" : lastBeatAt ? "stop-hook" : null,
+       blockCount: (await readText(statePath(workspace, "block-count"), "")).trim() || null,
+       tail: (await readText(statePath(workspace, "heartbeat-stop.log"), "")).split(/\r?\n/).filter(Boolean).slice(-10),
++      ...(spawnHeartbeatFresh
++        ? {
++            spawn: {
++              pid: spawnActive.pid ?? null,
++              started_at: spawnActive.started_at ?? null,
++              command: spawnActive.command ?? null,
++            },
++          }
++        : {}),
+     },
+     tests: {
+       total: items.length,
+diff --git a/dashboard/package.json b/dashboard/package.json
+index cbc30d6..d838a3a 100644
+--- a/dashboard/package.json
++++ b/dashboard/package.json
+@@ -12,7 +12,7 @@
+     "vercel:link": "vercel link --yes --project ai-heroes-harness-dashboard",
+     "deploy": "node scripts/deploy-preview.mjs",
+     "deploy:preview": "node scripts/deploy-preview.mjs",
+-    "check": "node --check server.mjs && node --check api/state.mjs && node --check api/ingest.mjs && node --check lib/collect-state.mjs && node --check scripts/publish-state.mjs && node --check scripts/check-vercel-target.mjs && node --check scripts/deploy-preview.mjs && node --check public/app.js"
++    "check": "node --check server.mjs && node --check api/state.mjs && node --check api/ingest.mjs && node --check lib/collect-state.mjs && node --check scripts/publish-state.mjs && node --check scripts/check-vercel-target.mjs && node --check scripts/deploy-preview.mjs && node --check public/app.js && node --check tests/collect-state-spawn-active.mjs && node tests/collect-state-spawn-active.mjs"
+   },
+   "dependencies": {
+     "@vercel/blob": "^2.4.0"
+diff --git a/dashboard/tests/collect-state-spawn-active.mjs b/dashboard/tests/collect-state-spawn-active.mjs
+new file mode 100644
+index 0000000..ba64a6c
+--- /dev/null
++++ b/dashboard/tests/collect-state-spawn-active.mjs
+@@ -0,0 +1,75 @@
++import assert from "node:assert/strict";
++import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
++import { join } from "node:path";
++import { tmpdir } from "node:os";
++import { collectHarnessBundle } from "../lib/collect-state.mjs";
++
++async function makeWorkspace(root, name) {
++  const workspace = join(root, name);
++  const stateDir = join(workspace, ".claude", "goal-state");
++  await mkdir(stateDir, { recursive: true });
++  await writeFile(join(workspace, "PROGRESS.md"), "## In progress\n\n_None yet._\n## Next\n\n_None._\n", "utf8");
++  await writeFile(join(workspace, "test-results.json"), '{"items":[]}\n', "utf8");
++  await writeFile(join(stateDir, "goal-state.json"), '{"status":"running","session_id":"session-' + name + '","goal":"dashboard test"}\n', "utf8");
++  return { workspace, stateDir };
++}
++
++async function collectOne(root, workspace, name) {
++  const ledger = join(root, `${name}.jsonl`);
++  await writeFile(
++    ledger,
++    JSON.stringify({
++      session_id: `session-${name}`,
++      agent: name,
++      channel: "test",
++      goal: "dashboard test",
++      started_at: Math.floor(Date.now() / 1000) - 60,
++      workspace,
++      launcher: "test",
++    }) + "\n",
++    "utf8",
++  );
++  const bundle = await collectHarnessBundle({ ledgerPath: ledger });
++  assert.equal(bundle.agents.length, 1);
++  return bundle.agents[0];
++}
++
++const root = await mkdtemp(join(tmpdir(), "collect-state-spawn-active."));
++
++try {
++  const spawnCase = await makeWorkspace(root, "spawn-case");
++  const refreshed = new Date(Date.now() - 20_000).toISOString();
++  await writeFile(
++    join(spawnCase.stateDir, "spawn-active.json"),
++    JSON.stringify({
++      pid: 4321,
++      started_at: new Date(Date.now() - 120_000).toISOString(),
++      last_refreshed: refreshed,
++      command: "codex",
++    }) + "\n",
++    "utf8",
++  );
++  const spawnAgent = await collectOne(root, spawnCase.workspace, "spawn-case");
++  assert.equal(spawnAgent.heartbeat.source, "spawn-active");
++  assert.equal(spawnAgent.heartbeat.lastBeatAt, refreshed);
++  assert.equal(spawnAgent.heartbeat.lastStatus, "active");
++  assert.equal(spawnAgent.heartbeat.spawn.pid, 4321);
++  assert.equal(spawnAgent.heartbeat.spawn.command, "codex");
++  console.log("PASS - collect-state uses fresh spawn-active heartbeat");
++
++  const stopCase = await makeWorkspace(root, "stop-case");
++  const beatEpoch = Math.floor(Date.now() / 1000) - 15;
++  await writeFile(join(stopCase.stateDir, "last-beat"), `${beatEpoch}\n`, "utf8");
++  await writeFile(
++    join(stopCase.stateDir, "last-beat-state.json"),
++    '{"source":"stop-hook","session_id":"session-stop-case","hook_event_name":"Stop"}\n',
++    "utf8",
++  );
++  const stopAgent = await collectOne(root, stopCase.workspace, "stop-case");
++  assert.equal(stopAgent.heartbeat.source, "stop-hook");
++  assert.equal(stopAgent.heartbeat.lastBeatAt, new Date(beatEpoch * 1000).toISOString());
++  assert.equal(stopAgent.heartbeat.spawn, undefined);
++  console.log("PASS - collect-state preserves stop-hook heartbeat path");
++} finally {
++  await rm(root, { recursive: true, force: true });
++}
+diff --git a/docs/observability.md b/docs/observability.md
+index ba2d96b..0111f00 100644
+--- a/docs/observability.md
++++ b/docs/observability.md
+@@ -12,6 +12,13 @@ tail -F .claude/goal-state/heartbeat-stop.log .claude/goal-state/discord-notify.
+ 
+ This surfaces every `Stop` decision, `SubagentStop` heartbeat tick, sprint pass notification, and goal-complete notification. It is most useful when a session appears silent in the chat UI but the hook chain is still active.
+ 
++During a long Codex executor run, also inspect
++`.claude/goal-state/spawn-active.json`. Its schema is
++`{"pid":<int>,"started_at":"<iso8601>","last_refreshed":"<iso8601>","command":"codex"}`.
++In the tmux layout, a quiet Panel 1 plus a fresh `last_refreshed` means the
++parent turn has not ended yet, but the Codex child is still refreshing the
++inner pulse.
++
+ Panel 2: current PASS/FAIL split in `test-results.json`.
+ 
+ ```bash
+diff --git a/hooks/heartbeat-stop.sh b/hooks/heartbeat-stop.sh
+index 91600eb..5b4d3f7 100755
+--- a/hooks/heartbeat-stop.sh
++++ b/hooks/heartbeat-stop.sh
+@@ -55,7 +55,7 @@ PY
+ 
+ write_state_snapshot() {
+   if command -v jq >/dev/null 2>&1; then
+-    if printf '%s' "$input" | jq -c '{session_id, hook_event_name, background_tasks, session_crons}' > "$STATE_DIR/last-beat-state.json" 2>/dev/null; then
++    if printf '%s' "$input" | jq -c '{source:"stop-hook", session_id, hook_event_name, background_tasks, session_crons}' > "$STATE_DIR/last-beat-state.json" 2>/dev/null; then
+       return 0
+     fi
+   fi
+@@ -72,6 +72,7 @@ try:
+ except json.JSONDecodeError:
+     data = {}
+ state = {
++    "source": "stop-hook",
+     "session_id": data.get("session_id"),
+     "hook_event_name": data.get("hook_event_name"),
+     "background_tasks": data.get("background_tasks"),
+@@ -81,7 +82,7 @@ Path(sys.argv[1]).write_text(json.dumps(state, separators=(",", ":")) + "\n")
+ PY
+     return 0
+   fi
+-  printf '{"session_id":null,"hook_event_name":null,"background_tasks":null,"session_crons":null}\n' > "$STATE_DIR/last-beat-state.json"
++  printf '{"source":"stop-hook","session_id":null,"hook_event_name":null,"background_tasks":null,"session_crons":null}\n' > "$STATE_DIR/last-beat-state.json"
+ }
+ 
+ EVENT_NAME="$(parse_event_name | tr -d '\r\n')"
+diff --git a/scripts/audit-discord-launchers.sh b/scripts/audit-discord-launchers.sh
+new file mode 100755
+index 0000000..d843c06
+--- /dev/null
++++ b/scripts/audit-discord-launchers.sh
+@@ -0,0 +1,107 @@
++#!/usr/bin/env bash
++set -euo pipefail
++# AI Heroes / Marco - discord-long-running-harness
++#
++# Accepted plugin-loading directives:
++#  - claude receives --plugin-dir <path-containing-discord-long-running-harness>
++#  - the launcher references a settings.json path from discord-long-running-harness
++#  - the launcher exports CLAUDE_PLUGIN_DIR, CLAUDE_PLUGIN_DIRS, or
++#    CLAUDE_PLUGIN_ROOT with a discord-long-running-harness path before
++#    invoking claude.
++#
++# AUDIT_LAUNCHER_DIR can point tests at a fixture directory. By default the
++# audit scans ~/.claude/channels/discord/start-*.sh and mutates nothing.
++
++LAUNCHER_DIR="${AUDIT_LAUNCHER_DIR:-$HOME/.claude/channels/discord}"
++PLUGIN_NAME="${AUDIT_PLUGIN_NAME:-discord-long-running-harness}"
++
++detect_method_python() {
++  python3 - "$1" "$PLUGIN_NAME" <<'PY'
++import re
++import sys
++from pathlib import Path
++
++path = Path(sys.argv[1])
++plugin_name = re.escape(sys.argv[2])
++text = path.read_text(encoding="utf-8", errors="replace")
++
++if not re.search(r"\bclaude\b", text):
++    print("no-claude-invocation")
++    raise SystemExit(0)
++
++patterns = [
++    ("plugin-dir", rf"--plugin-dir(?:=|\s+)['\"]?[^\s'\"\\]*{plugin_name}[^\s'\"\\]*['\"]?"),
++    ("settings-json", rf"{plugin_name}[^\n]*settings\.json|settings\.json[^\n]*{plugin_name}"),
++    ("exported-plugin-env", rf"(?:export\s+)?(?:CLAUDE_PLUGIN_DIRS?|CLAUDE_PLUGIN_ROOT)=['\"]?[^\s'\"\\]*{plugin_name}[^\s'\"\\]*['\"]?"),
++]
++
++for method, pattern in patterns:
++    if re.search(pattern, text, re.MULTILINE):
++        print(method)
++        raise SystemExit(0)
++
++raise SystemExit(1)
++PY
++}
++
++detect_method_grep() {
++  file="$1"
++  if ! grep -Eq '\bclaude\b' "$file"; then
++    printf 'no-claude-invocation\n'
++    return 0
++  fi
++  if grep -Eq -- "--plugin-dir([=[:space:]]+)[^[:space:]]*${PLUGIN_NAME}" "$file"; then
++    printf 'plugin-dir\n'
++    return 0
++  fi
++  if grep -Eq -- "${PLUGIN_NAME}.*settings\\.json|settings\\.json.*${PLUGIN_NAME}" "$file"; then
++    printf 'settings-json\n'
++    return 0
++  fi
++  if grep -Eq -- "(export[[:space:]]+)?(CLAUDE_PLUGIN_DIRS?|CLAUDE_PLUGIN_ROOT)=[^[:space:]]*${PLUGIN_NAME}" "$file"; then
++    printf 'exported-plugin-env\n'
++    return 0
++  fi
++  return 1
++}
++
++detect_method() {
++  file="$1"
++  if command -v python3 >/dev/null 2>&1; then
++    detect_method_python "$file"
++    return $?
++  fi
++  detect_method_grep "$file"
++}
++
++total=0
++passed=0
++failed=0
++
++shopt -s nullglob
++for launcher in "$LAUNCHER_DIR"/start-*.sh; do
++  [ -f "$launcher" ] || continue
++  [ -x "$launcher" ] || continue
++
++  total=$((total + 1))
++  name="$(basename "$launcher")"
++  slug="${name#start-}"
++  slug="${slug%.sh}"
++
++  set +e
++  method="$(detect_method "$launcher" 2>/dev/null)"
++  status="$?"
++  set -e
++
++  if [ "$status" -eq 0 ] && [ -n "$method" ]; then
++    passed=$((passed + 1))
++    printf 'PASS %s %s\n' "$slug" "$method"
++  else
++    failed=$((failed + 1))
++    printf 'FAIL %s missing-plugin-dir\n' "$slug"
++  fi
++done
++
++printf 'audit total=%s pass=%s fail=%s\n' "$total" "$passed" "$failed"
++
++[ "$failed" -eq 0 ]
+diff --git a/scripts/spawn-heartbeat.sh b/scripts/spawn-heartbeat.sh
+new file mode 100755
+index 0000000..87ac19a
+--- /dev/null
++++ b/scripts/spawn-heartbeat.sh
+@@ -0,0 +1,170 @@
++#!/usr/bin/env bash
++set -euo pipefail
++# AI Heroes / Marco - discord-long-running-harness
++
++usage() {
++  cat <<'USAGE'
++Usage: spawn-heartbeat.sh <target_pid> <state_dir> [--interval 30] [--command codex] [--max-runtime 7200]
++
++Refreshes .claude/goal-state/last-beat while a spawned command is still
++running, and writes spawn-active.json for dashboard consumers.
++USAGE
++}
++
++if [ "$#" -lt 2 ]; then
++  usage >&2
++  exit 2
++fi
++
++TARGET_PID="$1"
++STATE_DIR="$2"
++shift 2
++
++INTERVAL=30
++COMMAND_NAME="codex"
++MAX_RUNTIME=7200
++
++while [ "$#" -gt 0 ]; do
++  case "$1" in
++    --interval)
++      INTERVAL="${2:-}"
++      shift 2
++      ;;
++    --command)
++      COMMAND_NAME="${2:-}"
++      shift 2
++      ;;
++    --max-runtime)
++      MAX_RUNTIME="${2:-}"
++      shift 2
++      ;;
++    --help|-h)
++      usage
++      exit 0
++      ;;
++    *)
++      echo "spawn-heartbeat: unknown argument: $1" >&2
++      usage >&2
++      exit 2
++      ;;
++  esac
++done
++
++case "$TARGET_PID" in
++  ''|*[!0-9]*)
++    echo "spawn-heartbeat: target_pid must be a positive integer" >&2
++    exit 2
++    ;;
++esac
++
++case "$INTERVAL" in
++  ''|*[!0-9]*)
++    echo "spawn-heartbeat: --interval must be a positive integer" >&2
++    exit 2
++    ;;
++esac
++if [ "$INTERVAL" -lt 1 ]; then
++  echo "spawn-heartbeat: --interval must be at least 1" >&2
++  exit 2
++fi
++
++case "$MAX_RUNTIME" in
++  ''|*[!0-9]*)
++    echo "spawn-heartbeat: --max-runtime must be a non-negative integer" >&2
++    exit 2
++    ;;
++esac
++
++if [ ! -d "$STATE_DIR" ]; then
++  exit 0
++fi
++
++STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
++START_EPOCH="$(date +%s)"
++STOP_REQUESTED=0
++
++cleanup() {
++  rm -f "$STATE_DIR/spawn-active.json" 2>/dev/null || true
++}
++
++trap 'STOP_REQUESTED=1' INT TERM
++trap cleanup EXIT
++
++write_spawn_active() {
++  [ -d "$STATE_DIR" ] || return 1
++
++  now_epoch="$(date +%s)"
++  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
++  printf '%s\n' "$now_epoch" > "$STATE_DIR/last-beat"
++
++  tmp_file="$STATE_DIR/spawn-active.json.$$"
++  if command -v jq >/dev/null 2>&1 && jq -nc \
++      --argjson pid "$TARGET_PID" \
++      --arg started_at "$STARTED_AT" \
++      --arg last_refreshed "$now_iso" \
++      --arg command "$COMMAND_NAME" \
++      '{pid:$pid,started_at:$started_at,last_refreshed:$last_refreshed,command:$command}' \
++      > "$tmp_file" 2>/dev/null; then
++    true
++  elif command -v python3 >/dev/null 2>&1; then
++    SPAWN_HEARTBEAT_PID="$TARGET_PID" \
++    SPAWN_HEARTBEAT_STARTED_AT="$STARTED_AT" \
++    SPAWN_HEARTBEAT_LAST_REFRESHED="$now_iso" \
++    SPAWN_HEARTBEAT_COMMAND="$COMMAND_NAME" \
++    python3 - "$tmp_file" <<'PY'
++import json
++import os
++import sys
++from pathlib import Path
++
++record = {
++    "pid": int(os.environ["SPAWN_HEARTBEAT_PID"]),
++    "started_at": os.environ["SPAWN_HEARTBEAT_STARTED_AT"],
++    "last_refreshed": os.environ["SPAWN_HEARTBEAT_LAST_REFRESHED"],
++    "command": os.environ["SPAWN_HEARTBEAT_COMMAND"],
++}
++Path(sys.argv[1]).write_text(json.dumps(record, separators=(",", ":")) + "\n", encoding="utf-8")
++PY
++  else
++    safe_command="codex"
++    case "$COMMAND_NAME" in
++      *[!A-Za-z0-9._/-]*) ;;
++      *) safe_command="$COMMAND_NAME" ;;
++    esac
++    printf '{"pid":%s,"started_at":"%s","last_refreshed":"%s","command":"%s"}\n' \
++      "$TARGET_PID" "$STARTED_AT" "$now_iso" "$safe_command" > "$tmp_file"
++  fi
++
++  mv "$tmp_file" "$STATE_DIR/spawn-active.json"
++}
++
++write_spawn_active || exit 0
++
++while [ "$STOP_REQUESTED" -eq 0 ]; do
++  if ! kill -0 "$TARGET_PID" 2>/dev/null; then
++    break
++  fi
++
++  now="$(date +%s)"
++  if [ "$MAX_RUNTIME" -gt 0 ] && [ $((now - START_EPOCH)) -ge "$MAX_RUNTIME" ]; then
++    break
++  fi
++
++  sleep "$INTERVAL" || true
++
++  if [ "$STOP_REQUESTED" -ne 0 ]; then
++    break
++  fi
++  if ! kill -0 "$TARGET_PID" 2>/dev/null; then
++    break
++  fi
++
++  now="$(date +%s)"
++  if [ "$MAX_RUNTIME" -gt 0 ] && [ $((now - START_EPOCH)) -gt "$MAX_RUNTIME" ]; then
++    break
++  fi
++
++  write_spawn_active || break
++done
++
++exit 0
+diff --git a/tests/heartbeat/launcher-audit-detects-missing-flag.sh b/tests/heartbeat/launcher-audit-detects-missing-flag.sh
+new file mode 100755
+index 0000000..5b0037d
+--- /dev/null
++++ b/tests/heartbeat/launcher-audit-detects-missing-flag.sh
+@@ -0,0 +1,45 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
++AUDIT="$REPO_ROOT/scripts/audit-discord-launchers.sh"
++SCRATCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/launcher-audit.XXXXXX")"
++
++cleanup() {
++  rm -rf "$SCRATCH_ROOT"
++}
++trap cleanup EXIT
++
++fail() {
++  echo "FAIL - $1" >&2
++  exit 1
++}
++
++cat > "$SCRATCH_ROOT/start-good.sh" <<'GOOD'
++#!/usr/bin/env bash
++set -euo pipefail
++exec claude \
++  --plugin-dir /Users/marco/.claude/plugins/discord-long-running-harness \
++  "$@"
++GOOD
++
++cat > "$SCRATCH_ROOT/start-missing.sh" <<'BAD'
++#!/usr/bin/env bash
++set -euo pipefail
++exec claude "$@"
++BAD
++
++chmod +x "$SCRATCH_ROOT/start-good.sh" "$SCRATCH_ROOT/start-missing.sh"
++
++set +e
++AUDIT_LAUNCHER_DIR="$SCRATCH_ROOT" "$AUDIT" > "$SCRATCH_ROOT/audit.out" 2>&1
++status="$?"
++set -e
++
++[ "$status" -ne 0 ] || fail "audit unexpectedly passed with a missing plugin flag"
++grep -q '^PASS good plugin-dir$' "$SCRATCH_ROOT/audit.out" || fail "good launcher did not PASS via plugin-dir"
++grep -q '^FAIL missing missing-plugin-dir$' "$SCRATCH_ROOT/audit.out" || fail "missing launcher did not FAIL"
++grep -q '^audit total=2 pass=1 fail=1$' "$SCRATCH_ROOT/audit.out" || fail "audit summary was unexpected"
++
++cat "$SCRATCH_ROOT/audit.out"
++echo "PASS - launcher audit detects a missing --plugin-dir flag"
+diff --git a/tests/heartbeat/spawn-refresh.sh b/tests/heartbeat/spawn-refresh.sh
+new file mode 100755
+index 0000000..8d382b4
+--- /dev/null
++++ b/tests/heartbeat/spawn-refresh.sh
+@@ -0,0 +1,154 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
++SPAWN="$REPO_ROOT/bin/codex-spawn.sh"
++SCRATCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/heartbeat-spawn-refresh.XXXXXX")"
++
++cleanup() {
++  rm -rf "$SCRATCH_ROOT"
++}
++trap cleanup EXIT
++
++fail() {
++  echo "FAIL - $1" >&2
++  exit 1
++}
++
++mtime() {
++  path="$1"
++  if stat -f %m "$path" >/dev/null 2>&1; then
++    stat -f %m "$path"
++  else
++    stat -c %Y "$path"
++  fi
++}
++
++read_spawn_field() {
++  file="$1"
++  field="$2"
++  python3 - "$file" "$field" <<'PY'
++import datetime
++import json
++import sys
++from pathlib import Path
++
++path = Path(sys.argv[1])
++field = sys.argv[2]
++data = json.loads(path.read_text(encoding="utf-8"))
++assert isinstance(data, dict), data
++assert isinstance(data.get("pid"), int), data
++assert isinstance(data.get("started_at"), str) and data["started_at"], data
++assert isinstance(data.get("last_refreshed"), str) and data["last_refreshed"], data
++assert data.get("command") == "codex", data
++datetime.datetime.fromisoformat(data["started_at"].replace("Z", "+00:00"))
++datetime.datetime.fromisoformat(data["last_refreshed"].replace("Z", "+00:00"))
++print(data[field])
++PY
++}
++
++wait_for_file() {
++  file="$1"
++  attempts="$2"
++  while [ "$attempts" -gt 0 ]; do
++    [ -f "$file" ] && return 0
++    attempts=$((attempts - 1))
++    sleep 0.1
++  done
++  return 1
++}
++
++wait_for_absent() {
++  file="$1"
++  attempts="$2"
++  while [ "$attempts" -gt 0 ]; do
++    [ ! -e "$file" ] && return 0
++    attempts=$((attempts - 1))
++    sleep 0.1
++  done
++  return 1
++}
++
++mock_bin="$SCRATCH_ROOT/mock-bin"
++mkdir -p "$mock_bin"
++cat > "$mock_bin/codex" <<'MOCK'
++#!/usr/bin/env bash
++set -euo pipefail
++printf 'mock codex invoked: %s\n' "$*" >> "$MOCK_CODEX_LOG"
++sleep "${MOCK_CODEX_SLEEP_SECONDS:-75}"
++exit "${MOCK_CODEX_EXIT_CODE:-0}"
++MOCK
++chmod +x "$mock_bin/codex"
++
++model_env="$SCRATCH_ROOT/codex-current-model.env"
++printf 'CODEX_MODEL=gpt-5.5\n' > "$model_env"
++
++run_case() {
++  expected_exit="$1"
++  case_root="$SCRATCH_ROOT/case-$expected_exit"
++  workspace="$case_root/workspace"
++  state_dir="$workspace/.claude/goal-state"
++  output="$case_root/codex-spawn.out"
++  codex_log="$case_root/mock-codex.log"
++  mkdir -p "$state_dir"
++
++  start_epoch="$(date +%s)"
++  set +e
++  CODEX_MODEL_ENV_FILE="$model_env" \
++  CODEX_SPAWN_WORKDIR="$workspace" \
++  PATH="$mock_bin:$PATH" \
++  MOCK_CODEX_LOG="$codex_log" \
++  MOCK_CODEX_SLEEP_SECONDS=75 \
++  MOCK_CODEX_EXIT_CODE="$expected_exit" \
++    "$SPAWN" "synthetic heartbeat test exit $expected_exit" > "$output" 2>&1 &
++  spawn_pid="$!"
++  set -e
++
++  last_beat="$state_dir/last-beat"
++  spawn_active="$state_dir/spawn-active.json"
++
++  wait_for_file "$last_beat" 20 || fail "last-beat was not created within 2s for exit $expected_exit"
++  first_seen="$(date +%s)"
++  [ $((first_seen - start_epoch)) -le 2 ] || fail "last-beat creation took more than 2s for exit $expected_exit"
++  first_mtime="$(mtime "$last_beat")"
++  wait_for_file "$spawn_active" 20 || fail "spawn-active.json missing during spawn for exit $expected_exit"
++  first_refreshed="$(read_spawn_field "$spawn_active" last_refreshed)"
++  first_pid="$(read_spawn_field "$spawn_active" pid)"
++
++  echo "PASS exit=$expected_exit initial last-beat mtime=$first_mtime target_pid=$first_pid"
++  echo "LIVE spawn-active.json exit=$expected_exit"
++  cat "$spawn_active"
++
++  sleep 35
++  second_mtime="$(mtime "$last_beat")"
++  [ "$second_mtime" -gt "$first_mtime" ] || fail "last-beat mtime did not advance after first refresh for exit $expected_exit"
++  second_refreshed="$(read_spawn_field "$spawn_active" last_refreshed)"
++  [ "$second_refreshed" != "$first_refreshed" ] || fail "last_refreshed did not advance after first refresh for exit $expected_exit"
++  echo "PASS exit=$expected_exit mtime advance 1: $first_mtime -> $second_mtime"
++  echo "PASS exit=$expected_exit last_refreshed advance 1: $first_refreshed -> $second_refreshed"
++
++  sleep 35
++  third_mtime="$(mtime "$last_beat")"
++  [ "$third_mtime" -gt "$second_mtime" ] || fail "last-beat mtime did not advance after second refresh for exit $expected_exit"
++  third_refreshed="$(read_spawn_field "$spawn_active" last_refreshed)"
++  [ "$third_refreshed" != "$second_refreshed" ] || fail "last_refreshed did not advance after second refresh for exit $expected_exit"
++  echo "PASS exit=$expected_exit mtime advance 2: $second_mtime -> $third_mtime"
++  echo "PASS exit=$expected_exit last_refreshed advance 2: $second_refreshed -> $third_refreshed"
++
++  set +e
++  wait "$spawn_pid"
++  actual_exit="$?"
++  set -e
++  [ "$actual_exit" -eq "$expected_exit" ] || fail "codex-spawn exit $actual_exit, expected $expected_exit"
++  echo "PASS exit=$expected_exit codex-spawn exit propagated"
++
++  wait_for_absent "$spawn_active" 50 || fail "spawn-active.json was not removed within 5s for exit $expected_exit"
++  echo "AFTER exit=$expected_exit spawn-active ls:"
++  ls -l "$spawn_active" 2>&1 || true
++  echo "PASS exit=$expected_exit spawn-active removed"
++}
++
++run_case 0
++run_case 7
++
++echo "PASS - spawn heartbeat refreshes last-beat and preserves codex exit codes"
+diff --git a/tests/heartbeat/supervisor-no-false-stall.sh b/tests/heartbeat/supervisor-no-false-stall.sh
+new file mode 100755
+index 0000000..0cecb47
+--- /dev/null
++++ b/tests/heartbeat/supervisor-no-false-stall.sh
+@@ -0,0 +1,71 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
++PLUGIN_DIR="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
++RUNNER="$PLUGIN_DIR/scripts/supervisor-runner.sh"
++SCRATCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/heartbeat-supervisor-fresh.XXXXXX")"
++
++cleanup() {
++  rm -rf "$SCRATCH_ROOT"
++}
++trap cleanup EXIT
++
++fail() {
++  echo "FAIL - $1" >&2
++  exit 1
++}
++
++curl() {
++  printf 'curl %s\n' "$*" >> "$SUPERVISOR_CURL_CAPTURE"
++  return 0
++}
++export -f curl
++
++workspace="$SCRATCH_ROOT/workspace"
++state_dir="$workspace/.claude/goal-state"
++ledger="$SCRATCH_ROOT/active.jsonl"
++recovery_log="$SCRATCH_ROOT/recovery.log"
++completion_log="$SCRATCH_ROOT/completion.log"
++curl_capture="$SCRATCH_ROOT/curl-calls.log"
++output="$SCRATCH_ROOT/supervisor.out"
++mkdir -p "$state_dir"
++
++now="$(date +%s)"
++last_beat=$((now - 100))
++now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
++
++printf '%s\n' "$last_beat" > "$state_dir/last-beat"
++printf '{"status":"running","session_id":"spawn-fresh","goal":"fresh spawn"}\n' > "$state_dir/goal-state.json"
++printf '{"pid":12345,"started_at":"%s","last_refreshed":"%s","command":"codex"}\n' "$now_iso" "$now_iso" > "$state_dir/spawn-active.json"
++printf '{"session_id":"spawn-fresh","agent":"klaus","channel":"test-channel","goal":"fresh spawn","started_at":%s,"workspace":"%s","launcher":"test"}\n' \
++  "$((now - 600))" "$workspace" > "$ledger"
++
++SUPERVISOR_ACTIVE_LEDGER="$ledger" \
++SUPERVISOR_STALL_THRESHOLD=1200 \
++SUPERVISOR_RECOVERY_LOG="$recovery_log" \
++SUPERVISOR_COMPLETION_LOG="$completion_log" \
++SUPERVISOR_DISCORD_WEBHOOK="https://discord.example/webhook" \
++SUPERVISOR_CURL_CAPTURE="$curl_capture" \
++DISCORD_NOTIFY_MAX_ATTEMPTS=1 \
++"$RUNNER" > "$output"
++
++[ ! -s "$recovery_log" ] || fail "fresh spawn unexpectedly wrote recovery log"
++[ ! -s "$curl_capture" ] || fail "fresh spawn unexpectedly queued webhook curl"
++grep -q 'sessions_stalled=0' "$output" || fail "supervisor output did not report zero stalled sessions"
++grep -q 'sessions_ok=1' "$output" || fail "supervisor output did not report one ok session"
++
++cat "$output"
++echo "RECOVERY_LOG:"
++if [ -f "$recovery_log" ]; then
++  cat "$recovery_log"
++else
++  echo "(absent)"
++fi
++echo "WEBHOOK_CAPTURE:"
++if [ -f "$curl_capture" ]; then
++  cat "$curl_capture"
++else
++  echo "(absent)"
++fi
++echo "PASS - supervisor does not false-stall a workspace with fresh spawn heartbeat"

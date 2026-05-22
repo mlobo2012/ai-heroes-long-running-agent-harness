@@ -1,0 +1,8 @@
+FAIL don-draper missing-plugin-dir
+PASS klaus plugin-dir
+FAIL ray-kroc missing-plugin-dir
+PASS richard plugin-dir
+FAIL schmidt missing-plugin-dir
+PASS ted-mosby plugin-dir
+audit total=6 pass=3 fail=3
+EXIT_CODE=1

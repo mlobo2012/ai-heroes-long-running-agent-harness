@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0 — 2026-05-22
+
+Heartbeat-during-spawn coverage for long Codex executor runs.
+
+- Added the `spawn-active` heartbeat source so `codex-spawn.sh` keeps
+  `.claude/goal-state/last-beat` fresh while Codex is still running, plus
+  dashboard source reporting and Discord launcher plugin-wiring audit coverage.
+
 ## 0.13.0 — 2026-05-22
 
 Final gate documentation and install sync. Closes the Sprint 1 parity rollup,

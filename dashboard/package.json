@@ -12,7 +12,7 @@
     "vercel:link": "vercel link --yes --project ai-heroes-harness-dashboard",
     "deploy": "node scripts/deploy-preview.mjs",
     "deploy:preview": "node scripts/deploy-preview.mjs",
-    "check": "node --check server.mjs && node --check api/state.mjs && node --check api/ingest.mjs && node --check lib/collect-state.mjs && node --check scripts/publish-state.mjs && node --check scripts/check-vercel-target.mjs && node --check scripts/deploy-preview.mjs && node --check public/app.js"
+    "check": "node --check server.mjs && node --check api/state.mjs && node --check api/ingest.mjs && node --check lib/collect-state.mjs && node --check scripts/publish-state.mjs && node --check scripts/check-vercel-target.mjs && node --check scripts/deploy-preview.mjs && node --check public/app.js && node --check tests/collect-state-spawn-active.mjs && node tests/collect-state-spawn-active.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.4.0"
