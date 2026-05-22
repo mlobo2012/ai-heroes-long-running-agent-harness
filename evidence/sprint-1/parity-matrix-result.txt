@@ -1,0 +1,113 @@
+Sprint 1 evidence: S1_parity_matrix_complete
+=============================================
+
+Deliverable: /Users/marco/conductor/workspaces/klaus/dubai-5/docs/parity-gap-analysis.md
+Length: 494 lines
+
+Sources compared (each fetched/read in full):
+1. Anthropic March 2026 article — Harness Design for Long-Running Application Development
+   URL: https://www.anthropic.com/engineering/harness-design-long-running-apps
+   Status: WebFetch successful (two passes — second pass produced the deeper extract used
+   in the report). Key primitives captured: planner/generator/evaluator architecture,
+   sprint contracts (with verbatim FAIL examples), four-dimension design rubric,
+   context reset vs compaction, naive-implementation failure modes, V1 -> V2 sprint
+   removal (Opus 4.5 -> 4.6), quantitative cost tables ($200 V1 vs $124.70 V2).
+2. Anthropic November 2025 article — Effective Harnesses for Long-Running Agents
+   URL: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
+   Status: WebFetch successful. Primitives captured: initializer agent, init.sh,
+   claude-progress.txt, feature_list.json with description/steps/passes shape,
+   default-fail discipline, end-to-end verification via browser MCP.
+3. anthropics/cwc-long-running-agents reference repo
+   URL: https://github.com/anthropics/cwc-long-running-agents (Apache-2.0)
+   Status: 12 files listed via GitHub API; 9 fetched in full via raw.githubusercontent.com
+   (the LICENSE, .gitignore, and one settings.json that hit content limits were skipped
+   intentionally because their content is non-load-bearing for the parity matrix).
+   Files captured verbatim: README.md, claude-code-config/.claude/CLAUDE.md,
+   claude-code-config/.claude/agents/evaluator.md, all five hooks
+   (kill-switch.sh, steer.sh, track-read.sh, verify-gate.sh, commit-on-stop.sh),
+   claude-code-config/.claude/settings.json.
+
+Local harness inventory (each read via Read tool, not via Bash):
+- /Users/marco/conductor/workspaces/klaus/dubai-5/README.md (295 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/CLAUDE.md (44 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/CHANGELOG.md (20 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/SYNC.md (48 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/.claude-plugin/plugin.json (7 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/settings.json (74 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/agents/codex-executor.md (40 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/agents/evaluator.md (26 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/heartbeat-stop.sh (91 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/track-read.sh (11 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/verify-gate.sh (30 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/kill-switch.sh (9 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/steer.sh (14 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/commit-on-stop.sh (17 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/hooks/discord-notify.sh (128 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/bin/codex-spawn.sh (57 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/bin/enable-for-launcher.sh (115 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/scripts/register-goal.sh (162 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/scripts/verify-install.sh (132 lines)
+- /Users/marco/conductor/workspaces/klaus/dubai-5/.claude/goal-state/last-beat-state.json (1 line)
+
+Plus the repo-vs-worktree diff (hooks/hooks.json present in repo and installed plugin,
+absent from worktree; .git, .gitignore, CHANGELOG, LICENSE present in repo).
+
+Report structure (parity-gap-analysis.md):
+- Section A: 37-row primitive parity matrix (14 parity / 11 improvement / 6 partial / 6 missing)
+- Section B: 10 article recommendations not in our code (B1 through B10)
+- Section C: 10 performance angles with metrics, measurement methods, and "150% better" definitions
+- Section D: 14 subtle traps and bugs (D1 through D14)
+- Section E: 16-sprint plan, ordered parity -> performance -> polish, each with files/pass-signal/complexity
+- Appendix: file-by-file inventory of upstream (12 files) and our harness (21 files)
+
+Top 10 gaps surfaced in final response:
+ 1. verify-install.sh is Marco-specific (hardcoded klaus/richard launchers)
+ 2. Stop + SubagentStop double-fire eats the 8-block counter
+ 3. README references nonexistent docs/openclaw-supervisor/
+ 4. Worktree settings.json is dead code masquerading as canonical manifest
+ 5. verify-gate evidence is global, not per-row
+ 6. Evaluator soft Bash boundary (frontmatter grants Bash; prose says don't use it)
+ 7. No SessionStart enforcement of PROGRESS.md / test-results.json bootstrap
+ 8. No rubric for subjective goals (README promises GEO-article eval we cannot grade)
+ 9. STEER counter-reset depends on hook ordering that may not hold
+10. register-goal.sh re-registration creates duplicate active.jsonl lines
+
+Honesty notes (intellectually honest critiques of OUR own claims):
+- README L252 calls the 8-block cap "Anthropic's platform cap" but neither cwc nor either
+  article mentions such a cap. The cap is OUR implementation choice; the README claim is
+  unsourced. Sprint 15 in the plan flags this for renaming or sourcing.
+- README L123 references docs/openclaw-supervisor/ which does not exist in the repo.
+- README L221 describes the evaluator as "Read/Glob/Grep/Bash only, no Write" — but Bash
+  IS write-equivalent. The vendored evaluator.md is honest about this; the README is not.
+
+Pass criterion for S1_parity_matrix_complete:
+"docs/parity-gap-analysis.md exists, lists every primitive in the March article and
+cwc-long-running-agents, classifies each as parity / partial / missing / improvement
+against our harness, and is reviewed by the evaluator agent."
+
+State of pass criterion:
+- "exists": confirmed (494 lines at /Users/marco/conductor/workspaces/klaus/dubai-5/docs/parity-gap-analysis.md).
+- "lists every primitive in the March article": Section A covers planner, generator,
+  evaluator, sprint contract, design rubric, four grading dimensions, context reset,
+  browser-verified evaluator, calibration with few-shot, removed sprint construct,
+  unattended loop. Section B covers the remaining recommendations.
+- "lists every primitive in cwc-long-running-agents": Section A covers Default-FAIL
+  contract, test-results.json, verify-gate, track-read, kill-switch, steer, commit-on-stop,
+  fresh-context evaluator, agent-maintained handoff, PROGRESS.md, /goal overlay, the
+  five hook-script files plus the evaluator subagent plus CLAUDE.md plus settings.json.
+- "classifies each as parity / partial / missing / improvement": yes — column 5 of
+  the matrix uses ✅ parity / ⚠️ partial / ❌ missing / ➕ we improve consistently.
+- "reviewed by the evaluator agent": NOT YET. This is the one outstanding sub-condition.
+  Pending an evaluator sub-agent run; see deferred work below.
+
+Deferred work (separate sprints):
+- S1_every_upstream_primitive_addressed: requires opening closing changes for each
+  Missing/Partial row OR documenting in docs/parity-decisions.md why we deliberately
+  differ. The report itself doesn't close those; it identifies them. This is Sprint S1
+  follow-on work, not blocking on S1_parity_matrix_complete's own evidence.
+- S2 through S9: each has its own pass criterion and evidence file path under
+  evidence/sprint-<n>/ — independent of this sprint's evidence.
+
+This file is intentionally a *-result.txt so hooks/track-read.sh recognizes it as
+evidence under its current narrow pattern set. The pattern is one of the documented
+gaps in section A (row 5) and section E (sprint 5 / S2_track_read_recognizes_general_evidence).

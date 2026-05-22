@@ -86,7 +86,7 @@ check_track_read_skips_non_evidence() {
 }
 
 check_evaluator_has_playwright_mcp_tools() {
-  tools_line=$(sed -n '/^---$/,/^---$/{/^tools:/p}' "$PLUGIN_DIR/agents/evaluator.md")
+  tools_line=$(awk 'BEGIN { frontmatter=0 } /^---$/ { frontmatter++; next } frontmatter == 1 && /^tools:/ { print }' "$PLUGIN_DIR/agents/evaluator.md")
   printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_navigate' || return 1
   printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_take_screenshot' || return 1
   printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_snapshot' || return 1

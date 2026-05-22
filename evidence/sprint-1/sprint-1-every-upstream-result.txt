@@ -1,0 +1,40 @@
+S1_every_upstream_primitive_addressed
+
+Acceptance criterion verbatim:
+- docs/parity-decisions.md exists and lists every parity-matrix row with status (closed | partial-closed | deferred | deliberately-different).
+- For every CLOSED row, names the test-results.json item that closed it and the commit SHA.
+- For every DEFERRED row, gives a 1-2 sentence rationale.
+- The list aligns with the rollup spec (every named gap covered).
+
+File-and-line citations:
+- docs/parity-decisions.md:11-19 defines the four allowed statuses.
+- docs/parity-decisions.md:21-61 lists all 37 primitive matrix rows.
+- docs/parity-decisions.md:25-61 gives each row a status and a closing item/commit or rationale.
+- docs/parity-decisions.md:63-76 covers B1-B10.
+- docs/parity-decisions.md:78-95 covers D1-D14.
+- docs/parity-decisions.md:43-50 covers the previously missing rows 19-26.
+- docs/parity-decisions.md:59-61 covers previously missing/partial rows 35-37.
+- docs/parity-decisions.md:45-47 and 50 record deferred rationales for row 21, 22, 23, and 26.
+
+T1 spot-check:
+Command: test -f docs/parity-decisions.md
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: grep -E '^\| (3|14|19|20|21|22|23|24|25|26|35|36|37) \|' docs/parity-decisions.md
+Output: rows 3, 14, 19, 20, 21, 22, 23, 24, 25, 26, 35, 36, and 37 all present with a decision.
+
+T3 spot-check:
+Command: grep -E '^\| B(1|2|3|4|5|6|7|8|9|10) \|' docs/parity-decisions.md && grep -E '^\| D(1|2|3|4|5|6|7|8|9|10|11|12|13|14) \|' docs/parity-decisions.md
+Output: all B1-B10 and D1-D14 rows present.
+
+T4 spot-check:
+Command: scripts/verify-install.sh --scope all
+Relevant output:
+PASS - parity decisions rollup present
+PASS - sync-to-install script executable and syntactically valid
+PASS - README capability map present
+
+Self-grade:
+PASS. The rollup is comprehensive, names closure items and commits for closed rows, and gives rationales for every deliberately deferred or deliberately different parity decision.
+

@@ -1,0 +1,38 @@
+Acceptance criterion verbatim:
+### S9_eight_block_cap_documented_and_correct
+- grep -in 'anthropic.*platform.*cap\|platform cap' README.md returns either zero hits OR only hits that explicitly say "this is OUR anti-runaway cap, not an Anthropic platform cap" (i.e., disclaiming any platform-cap framing).
+- README clearly states the cap is the harness's own (8 consecutive Stop blocks before allow).
+- New unit test tests/cap/eight-block-cap.sh does the following in a mktemp workspace:
+  - Synthesizes a goal: test-results.json with a single passes:false row.
+  - Iterates: invoke hooks/heartbeat-stop.sh with a Stop-event JSON payload on stdin; capture exit code and the on-disk block-count.
+  - First 8 iterations should exit 2 (block) and increment the counter 1..8.
+  - 9th iteration should exit 0 (allow) and log "anti-runaway-cap".
+  - SubagentStop iteration MUST NOT increment the counter (sanity check for the D2 fix).
+- The test is invokable from the workspace root and exits 0 on success, non-zero on failure.
+
+File-and-line citations:
+- README.md:354-355 states the harness enforces an anti-runaway cap after 8 consecutive Stop blocks and that SubagentStop events do not count.
+- hooks/heartbeat-stop.sh:88-94 short-circuits SubagentStop without incrementing the block counter.
+- hooks/heartbeat-stop.sh:157-164 allows when count is >= 8, logs anti-runaway-cap, otherwise increments and blocks.
+- tests/cap/eight-block-cap.sh:18-22 creates the mktemp workspace goal and single passes:false row.
+- tests/cap/eight-block-cap.sh:40-56 verifies SubagentStop does not increment, Stops 1..8 block and count 1..8, and the 9th Stop allows with anti-runaway-cap logged.
+- CHANGELOG.md:13-16 records the 0.7.0 cap documentation/test closure.
+
+T1 spot-check:
+$ grep -in 'anthropic.*platform.*cap\|platform cap' README.md || true
+output: <none>
+
+T2 spot-check:
+$ bash -n tests/cap/eight-block-cap.sh
+output: <none>; exit 0
+
+T3 spot-check:
+$ bash tests/cap/eight-block-cap.sh
+PASS eight-block anti-runaway cap
+
+T4 spot-check:
+$ grep -q 'anti-runaway' README.md && echo PASS
+PASS
+
+Self-grade:
+PASS. The cap is documented as the harness-owned anti-runaway cap, and the external unit test proves the 8-block boundary plus SubagentStop non-increment behavior.

@@ -1,0 +1,39 @@
+S18_blocker_ledger
+
+Acceptance criterion verbatim:
+- .claude/goal-state/blockers.jsonl is the canonical ledger location. The file is append-only; status updates land as new lines with the same id (latest-wins on read).
+- Schema (from design note): id, title, severity (critical|high|medium|low|nit), status (open|triaged|resolved|wontfix), discovered_at (ISO8601), discovered_by, evidence_paths (array), reproduction_notes, affected_area, resolution_notes.
+- scripts/blocker-record.sh CLI: blocker-record.sh --title "..." --severity <s> [--id <id>] [--evidence path1,path2,...] [--reproduction "..."] [--area "..."] [--by "..."]. Generates id as B-<slug-from-title> if not provided. Sets status: open, discovered_at: $(date -u -Iseconds). Validates severity enum. Appends JSON line.
+- scripts/blocker-update.sh CLI: blocker-update.sh --id <id> --status <s> [--evidence path1,path2,...] [--resolution "..."]. Rejects unknown id. Validates status enum. Appends JSON line.
+- Both scripts are bash (use python3 for JSON construction). Both fail loud on invalid input.
+
+File-and-line citations:
+- scripts/blocker-record.sh:1-4 is a bash wrapper using python3 for JSON construction.
+- scripts/blocker-record.sh:13-25 defines the schema keys and severity/status enums.
+- scripts/blocker-record.sh:35-45 generates B-<slug> IDs and writes to .claude/goal-state/blockers.jsonl under the current workspace.
+- scripts/blocker-record.sh:60-80 implements and validates the required CLI.
+- scripts/blocker-record.sh:82-101 writes an open JSON line with ISO8601 discovered_at.
+- scripts/blocker-update.sh:1-4 is a bash wrapper using python3.
+- scripts/blocker-update.sh:43-56 validates schema, status, evidence, and terminal status requirements.
+- scripts/blocker-update.sh:74-92 rejects missing ledgers and unknown IDs while folding latest-wins.
+- scripts/blocker-update.sh:94-106 appends the updated full record as a new line.
+- scripts/verify-install.sh:268-270 verifies both scripts are executable.
+
+T1 spot-check:
+Command: bash -n scripts/blocker-record.sh && bash -n scripts/blocker-update.sh
+Output: exit 0.
+
+T2 spot-check:
+Command:
+REPO_ROOT="$PWD"; SCRATCH="$(mktemp -d)"; cd "$SCRATCH"; mkdir -p .claude/goal-state; "$REPO_ROOT/scripts/blocker-record.sh" --title "test blocker" --severity high; "$REPO_ROOT/scripts/blocker-update.sh" --id "$(python3 -c "import json; lines=open('.claude/goal-state/blockers.jsonl').read().splitlines(); print(json.loads(lines[-1])['id'])")" --status resolved --evidence /tmp/foo.txt --resolution "fixed"; test "$(wc -l < .claude/goal-state/blockers.jsonl | tr -d ' ')" -eq 2
+Output:
+B-test-blocker
+B-test-blocker
+B-test-blocker resolved /tmp/foo.txt
+
+T3 spot-check:
+Command: scripts/verify-install.sh --scope all
+Output excerpt:
+PASS - blocker ledger scripts executable
+
+Self-grade: PASS. The ledger scripts append full JSON records, validate enums/schema, reject unknown update IDs, and the latest-wins behavior is exercised by the record/update schema check.

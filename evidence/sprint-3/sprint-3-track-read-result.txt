@@ -1,0 +1,46 @@
+Sprint 3 evidence -- S3_track_read_recognizes_general_evidence
+===============================================================
+
+Acceptance criterion (verbatim):
+"hooks/track-read.sh records evidence for non-UI work too — at minimum *.log under .claude/goal-state/ or evidence/, *.txt under evidence/, *.json under evidence/, *-diff.patch, *.png, *.md under evidence/."
+
+Artefacts and line citations:
+  hooks/track-read.sh lines 4-7 parse the Read hook payload and choose the evidence log.
+  hooks/track-read.sh lines 9-15 allow the existing patterns (*screenshots/*,
+  *-console.txt, *-result.txt, *.png) plus the new general-evidence patterns:
+  .claude/goal-state/*.log, evidence/*.log, evidence/*.txt, evidence/*.json,
+  *-diff.patch, and evidence/*.md.
+  hooks/track-read.sh lines 16-18 keep the production file-exists guard while
+  allowing VERIFY_READ_LOG test fixtures, create the log parent if needed, and
+  append the matched path.
+
+T1 -- Required new pattern coverage.
+  Command:
+    rm -f /tmp/tr-test.log
+    for f in \
+      'evidence/sprint-99/foo.txt' \
+      'evidence/sprint-99/bar.json' \
+      'evidence/sprint-99/baz.md' \
+      '.claude/goal-state/qux.log' \
+      'evidence/sprint-99/diff-diff.patch'; do
+      echo "{\"tool_input\":{\"file_path\":\"$f\"}}" \
+        | VERIFY_READ_LOG=/tmp/tr-test.log hooks/track-read.sh
+    done
+    test "$(wc -l < /tmp/tr-test.log)" -eq 5
+  Result: PASS. The log had 5 lines:
+    evidence/sprint-99/foo.txt
+    evidence/sprint-99/bar.json
+    evidence/sprint-99/baz.md
+    .claude/goal-state/qux.log
+    evidence/sprint-99/diff-diff.patch
+
+T2 -- Existing pattern regression check.
+  Payloads for foo/screenshots/a.png, run-console.txt, run-result.txt, and
+  plain.png all appended to /tmp/tr-existing.log.
+  Result: PASS. The log had 4 lines.
+
+T3 -- False-positive spot check.
+  Payload notes/not-evidence.txt did not append to /tmp/tr-existing.log.
+  Result: PASS. Only the 4 expected existing-pattern paths were logged.
+
+Self-grade: PASS.

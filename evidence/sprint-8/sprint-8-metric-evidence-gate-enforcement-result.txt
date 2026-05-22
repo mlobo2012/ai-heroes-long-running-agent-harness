@@ -1,0 +1,35 @@
+Acceptance criterion verbatim:
+S8_metric_evidence_gate_enforcement:
+- docs/benchmarks.md has a section "Evidence-gate enforcement" with:
+  - Count of verify-gate blocks during this session (parse `heartbeat-stop.log` or look at the block-count file's history if available; if not directly available, run the new `scripts/benchmark-collect.sh` and report what IS available).
+  - Count of evidence files Read (line count of `.claude/.evidence-reads` over time, or by scanning the on-disk `evidence/` tree).
+  - Ratio.
+
+File-and-line citations:
+- docs/benchmarks.md:88 names the "Evidence-gate enforcement" section.
+- docs/benchmarks.md:90-92 states the collector's available sources.
+- docs/benchmarks.md:96-102 reports 4 verify-gate blocks, 0 current evidence-read log lines, 38 evidence artifacts, and ratios.
+- docs/benchmarks.md:104-108 discloses that `.claude/.evidence-reads` is consumed/truncated and uses the evidence tree as the durable proxy.
+- docs/benchmarks.md:110-117 lists the counted verify-gate block source lines.
+- scripts/benchmark-collect.sh:168-200 scans Codex spawn logs for persisted verify-gate block JSON.
+- scripts/benchmark-collect.sh:203-233 counts `.claude/.evidence-reads`, evidence artifacts, and block ratios.
+
+T1 spot-check:
+Command: scripts/benchmark-collect.sh | python3 -c 'import json,sys; d=json.load(sys.stdin); print("verify_blocks", d["evidence_gate"]["verify_gate_block_count"]); print("evidence_reads", d["evidence_gate"]["evidence_read_count"]); print("evidence_artifacts", d["evidence_gate"]["evidence_artifact_count"]); print("blocks_per_artifact", round(d["evidence_gate"]["blocks_per_evidence_artifact"], 4))'
+Output:
+verify_blocks 4
+evidence_reads 0
+evidence_artifacts 38
+blocks_per_artifact 0.1053
+
+T2 spot-check:
+Command: grep -n 'Evidence-gate enforcement' docs/benchmarks.md
+Output:
+88:## Evidence-gate enforcement
+
+T3 spot-check:
+Command: bash -n scripts/benchmark-collect.sh && bash tests/benchmarks/benchmark-collect.sh
+Output:
+PASS benchmark collector
+
+Self-grade: PASS.

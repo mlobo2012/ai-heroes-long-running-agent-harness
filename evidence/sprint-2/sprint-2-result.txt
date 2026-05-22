@@ -1,0 +1,62 @@
+=== Sprint 2 (S2a+S2b+S2c) — install honesty, dead-code removal, supervisor docs ===
+Date: 2026-05-22T09:49:00Z
+
+## S2a: verify-install --scope core | setup | all
+Core checks (community-friendly install):
+  == core checks ==
+  PASS - plugin dir and plugin.json
+  PASS - Claude plugin manifest validates
+  PASS - plugin hooks config is discoverable
+  PASS - hook scripts executable
+  PASS - codex-spawn dry-run uses gpt-5.5 xhigh
+  PASS - CODEX_MODEL env file valid
+  PASS - forbid gpt-5.4
+  PASS - forbid gpt-5.5-codex
+  PASS - goal sessions active.jsonl exists
+  PASS - register-goal usage errors
+  PASS - Claude CLI supports --plugin-dir
+  core exit: 0
+
+Setup checks (OpenClaw + Marco launchers):
+  == setup checks ==
+  PASS - goal-supervisor HEARTBEAT.md exists
+  PASS - openclaw.json contains goal-supervisor
+  PASS - openclaw.json backup exists
+  PASS - enable-for-launcher dry-run does not edit
+  PASS - launchers do not use obsolete --plugin flag
+  PASS - router workers inherit harness plugin dir
+  setup exit: 0
+
+## S2b: settings.json removal — verified no remaining refs
+  PASS - settings.json removed from worktree
+  README mentions of settings.json: 0
+0 (expect 0)
+  README mentions of legacy --plugin form: 0
+0 (expect 0)
+
+## S2c: docs/openclaw-supervisor/ present
+  total 32
+  drwxr-xr-x@ 6 marco  staff   192 May 22 10:45 .
+  drwxr-xr-x@ 4 marco  staff   128 May 22 10:44 ..
+  -rw-r--r--@ 1 marco  staff  2266 May 22 10:45 HEARTBEAT.md
+  -rw-r--r--@ 1 marco  staff  2657 May 22 10:44 README.md
+  -rw-r--r--@ 1 marco  staff  1054 May 22 10:45 openclaw.json.example
+  -rw-r--r--@ 1 marco  staff   495 May 22 10:45 workspace-README.md
+  README §Optional outer pulse references docs/openclaw-supervisor/:
+    163:If you run OpenClaw, add a `goal-supervisor` agent with a 15-minute heartbeat. The repo ships a complete reference under [`docs/openclaw-supervisor/`](./docs/openclaw-supervisor/):
+    171:cp docs/openclaw-supervisor/HEARTBEAT.md ~/.openclaw/workspace-goal-supervisor/HEARTBEAT.md
+    172:cp docs/openclaw-supervisor/workspace-README.md ~/.openclaw/workspace-goal-supervisor/README.md
+    174:# Manually merge docs/openclaw-supervisor/openclaw.json.example into agents.list.
+
+## plugin.json version + CHANGELOG entry
+  plugin.json version: 0.3.0
+  PASS - CHANGELOG 0.3.0 entry exists
+
+## D2 + D14 fix mentioned in CHANGELOG
+  PASS - SubagentStop fix documented
+  PASS - D14 mention present
+
+## Final verify-install run from install dir
+  PASS - router workers inherit harness plugin dir
+  total exit: 0
+  total PASS: 17

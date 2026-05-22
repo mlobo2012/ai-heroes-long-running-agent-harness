@@ -1,0 +1,37 @@
+Acceptance criterion verbatim:
+
+S10_init_workspace_script:
+- `scripts/init-workspace.sh <workspace-dir>` (or via no-arg → current dir) creates:
+  - `PROGRESS.md` with the 4-section template (## Done, ## In progress, ## Next, ## Notes).
+  - `test-results.json` with a goal placeholder and empty items array (or a stub item).
+  - `STEER.md` (empty file with a one-line comment).
+  - `.claude/goal-state/` directory with an empty `block-count` (`0\n`).
+  - An initial git commit named `init: seed workspace for long-running goal` (skip if not a git repo OR the workspace was already a git repo with uncommitted state — be careful, don't auto-add unrelated files).
+- The script is idempotent: re-running on a workspace that already has the bootstrap files does not clobber them.
+- Unit test PASS in mktemp.
+
+File-and-line citations:
+- scripts/init-workspace.sh:9-12 accepts `<workspace-dir>` or defaults to the current directory.
+- scripts/init-workspace.sh:21-30 writes only when the target path is missing, preserving idempotence.
+- scripts/init-workspace.sh:32-53 seeds `PROGRESS.md` with `## Done`, `## In progress`, `## Next`, and `## Notes`.
+- scripts/init-workspace.sh:56-62 seeds `test-results.json` with a goal placeholder and empty `items` array.
+- scripts/init-workspace.sh:65-73 seeds `STEER.md` and `block-count` with `0\n`.
+- scripts/init-workspace.sh:75-97 commits only created seed files, only when the git worktree was clean before seeding, with the required subject.
+- tests/init-workspace/seed.sh:18-24 creates a mktemp git workspace and runs the initializer.
+- tests/init-workspace/seed.sh:26-45 asserts the seeded files, sections, block-count, and JSON shape.
+- tests/init-workspace/seed.sh:47-63 asserts the initial commit and rerun idempotence.
+
+T1 spot-check:
+Command: `bash -n scripts/init-workspace.sh`
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: `bash tests/init-workspace/seed.sh`
+Output: `PASS - init-workspace seeds files, commits once, and is idempotent`
+
+T3 spot-check:
+Command: `scripts/verify-install.sh --scope all`
+Output included: `PASS - init-workspace script executable and syntactically valid`
+
+Self-grade:
+PASS. The initializer seeds the required files without clobbering, commits only its own new files when safe, and has a mktemp unit test covering creation, commit subject, clean status, and rerun idempotence.

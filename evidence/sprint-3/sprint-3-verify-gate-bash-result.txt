@@ -1,0 +1,39 @@
+Sprint 3 evidence -- S3_verify_gate_bash_disclosure
+===================================================
+
+Acceptance criterion (verbatim):
+"verify-gate's known gap (Bash sed/jq bypass) is explicitly disclosed in README with a recommended hardening path, OR closed by an additional Bash-PreToolUse guard. Closes matrix trap D6."
+
+Artefacts and line citations:
+  README.md line 56 adds "Known soft boundary: Bash sed/jq on `test-results.json`".
+  README.md line 58 names hooks/verify-gate.sh as a Write|Edit hook and avoids
+  claiming it is a shell sandbox.
+  README.md line 60 names the exact bypass:
+  bash -c 'sed -i "s/false/true/" test-results.json'.
+  README.md line 62 names the partial close: agents/evaluator-strict.md drops
+  Bash from the evaluator's tool grant, closing the grader-side bypass but not
+  generator-side Bash access.
+  README.md line 64 recommends one concrete hardening path: add a PreToolUse
+  Bash hook that blocks sed.*test-results\.json|jq.*test-results\.json.
+  hooks/verify-gate.sh lines 9-11 also keep the in-code disclosure that this is
+  a Write/Edit-only teaching example and Bash sed/jq can rewrite unchecked.
+
+T1 -- README names the soft boundary.
+  Command: grep -q 'soft boundary' README.md
+  Result: PASS.
+
+T2 -- README names evaluator-strict as the partial close.
+  Command: grep -q 'evaluator-strict' README.md
+  Result: PASS.
+
+T3 -- Disclosure is honest.
+  The README states that evaluator-strict closes the grader-side sed/jq bypass
+  only and "does not close generator-side Bash access during normal engineering
+  work" (README.md line 62).
+  Result: PASS.
+
+T4 -- Recommended hardening is concrete and singular.
+  README.md line 64 gives the Bash PreToolUse hook matcher and command regex.
+  Result: PASS.
+
+Self-grade: PASS.

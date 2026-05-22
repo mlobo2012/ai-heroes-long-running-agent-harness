@@ -1,0 +1,46 @@
+S15_every_install_op_reversible
+
+Acceptance criterion verbatim:
+- Identify every script that modifies user state outside the workspace. Likely:
+  - bin/enable-for-launcher.sh (edits launcher configs or similar)
+  - scripts/register-goal.sh (appends to ~/.claude/goal-sessions/active.jsonl)
+- For each, add a timestamped backup BEFORE the modification. Use a pattern like `cp "$target" "$target.bak.$(date +%s).<scriptname>"`.
+- README.md gains a "Reversibility" section that lists each modification path and the exact rollback command (e.g., `mv ~/.claude/goal-sessions/active.jsonl.bak.<ts>.register-goal ~/.claude/goal-sessions/active.jsonl`).
+- The Reversibility section is honest about which scripts modify what.
+
+File-and-line citations:
+- bin/enable-for-launcher.sh:138 through bin/enable-for-launcher.sh:140 create the timestamped `*.enable-for-launcher` backup before launcher replacement at bin/enable-for-launcher.sh:143.
+- scripts/register-goal.sh:94 through scripts/register-goal.sh:95 define the `*.register-goal` active-ledger backup path.
+- scripts/register-goal.sh:123 through scripts/register-goal.sh:136 back up `active.jsonl` before the locked write path; scripts/register-goal.sh:171 through scripts/register-goal.sh:176 do the same for the fcntl fallback.
+- scripts/register-goal.sh:201 through scripts/register-goal.sh:216 back up `<workspace>/.claude/goal-state/goal-state.json` before replacing it.
+- scripts/register-goal.sh:230 through scripts/register-goal.sh:231 print both backup paths for the operator.
+- scripts/supervisor-runner.sh:60 defines a run backup timestamp; scripts/supervisor-runner.sh:92 through scripts/supervisor-runner.sh:109 back up recovery/completion logs before JSONL append; scripts/supervisor-runner.sh:260 through scripts/supervisor-runner.sh:262 back up the active ledger before completion trimming.
+- README.md:419 through README.md:423 introduce Reversibility and the backup rule.
+- README.md:445 through README.md:461 document launcher helper modifications and rollback.
+- README.md:463 through README.md:488 document goal registration modifications and rollback.
+- README.md:490 through README.md:515 document supervisor-runner modifications, backup naming, rollback, and the non-reversible webhook side effect.
+- README.md:517 through README.md:527 document OpenClaw supervisor rollback.
+
+T1 spot-check:
+Command: for s in bin/enable-for-launcher.sh scripts/register-goal.sh; do bash -n "$s"; done
+Output: exit 0.
+
+T2 spot-check:
+Command: temp HOME/workspace launcher run of enable-for-launcher.sh --apply and register-goal.sh, then `ls` for `*.enable-for-launcher` and `*.register-goal` backups.
+Output: PASS - backups created for launcher, active ledger, and goal state
+
+T3 spot-check:
+Command: temp supervisor-runner stale/completed sessions with `SUPERVISOR_BACKUP_TS`, then `ls` for recovery, completion, and active-ledger backups.
+Output: PASS - supervisor backups created for recovery, completion, and active ledger trim
+
+T4 spot-check:
+Command: grep -q 'Reversibility' README.md && grep -Eq 'rollback|restore|revert' README.md
+Output: exit 0.
+
+T5 spot-check:
+Command: scripts/verify-install.sh --scope all
+Relevant output:
+PASS - reversibility docs present
+
+Self-grade:
+PASS. The external state writers now create timestamped backups before writes, and README documents rollback for each modification path.

@@ -1,0 +1,34 @@
+Acceptance criterion verbatim:
+
+S13_observability_docs:
+- `docs/observability.md` documents the cwc-style watch -n 2 panel set:
+  - Panel 1: `tail -F heartbeat-stop.log discord-notify.log` (or similar)
+  - Panel 2: `watch -n 2 'jq -r .items[].passes test-results.json | sort | uniq -c'` (or python equivalent — show the PASS:FAIL split)
+  - Panel 3: `watch -n 2 cat .claude/goal-state/block-count`
+  - Panel 4: `tail -F evidence/*-result.txt`
+- A tmux layout example (or a `tmux -CC new-session ...` invocation).
+- Honest about what each panel surfaces and when it's useful.
+
+File-and-line citations:
+- docs/observability.md:7-13 documents Panel 1 with `tail -F .claude/goal-state/heartbeat-stop.log .claude/goal-state/discord-notify.log` and explains what it surfaces.
+- docs/observability.md:15-21 documents Panel 2 with `watch -n 2` and a PASS/FAIL split from `test-results.json`.
+- docs/observability.md:23-29 documents Panel 3 with `watch -n 2 cat .claude/goal-state/block-count` and explains the parent-Stop block counter.
+- docs/observability.md:31-37 documents Panel 4 with `tail -F` over evidence result files and explains when it is useful.
+- docs/observability.md:39-54 provides a four-pane tmux layout example.
+- docs/observability.md:56 documents the completed-session ledger surface.
+- README.md:265 links readers to `docs/observability.md`.
+
+T1 spot-check:
+Command: `grep -q 'observability' docs/observability.md && grep -q 'watch -n' docs/observability.md`
+Output: no output; exit 0.
+
+T2 spot-check:
+Command: `grep -q 'observability.md' README.md`
+Output: no output; exit 0.
+
+T3 spot-check:
+Command: `scripts/verify-install.sh --scope all`
+Output included: all 28 checks passing.
+
+Self-grade:
+PASS. The doc contains the requested panel set, tmux layout, and practical notes about what each panel reveals during a live goal.

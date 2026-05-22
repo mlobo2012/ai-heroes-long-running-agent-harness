@@ -1,0 +1,30 @@
+S18_scope_policy_field
+
+Acceptance criterion verbatim:
+- test-results.json MAY have an optional top-level field scope_policy whose value is one of fixed_scope / production_hardening / research_only. Missing field -> treated as fixed_scope.
+- hooks/heartbeat-stop.sh reads this field via python3 -c "import json; ..." and decides accordingly.
+- scripts/verify-install.sh has a check that validates the field's optional-and-enumerated nature (if present, must be one of the three values).
+- The field documented in docs/scope-policies.md.
+
+File-and-line citations:
+- hooks/heartbeat-stop.sh:133 reads the optional policy; hooks/heartbeat-stop.sh:136 uses python3 -c and defaults invalid/missing values to fixed_scope for hook behavior.
+- hooks/heartbeat-stop.sh:193-205 applies the policy branch before goal-met is logged.
+- scripts/verify-install.sh:232-265 validates missing, valid, invalid, and current-file scope_policy cases.
+- scripts/verify-install.sh:309 wires the check into core install verification.
+- docs/scope-policies.md:6-28 documents the optional field, default, and valid enum values.
+
+T1 spot-check:
+Command: bash -n hooks/heartbeat-stop.sh
+Output: exit 0.
+
+T2 spot-check:
+Command: scripts/verify-install.sh --scope all
+Output excerpt:
+PASS - scope_policy field is optional and enumerated
+
+T3 spot-check:
+Command: bash tests/scope-policy/fixed-scope-unchanged.sh
+Output:
+PASS - fixed_scope missing field preserves existing completion behavior
+
+Self-grade: PASS. The policy field is opt-in, missing still behaves as fixed_scope, install validation catches invalid enum values, and the user-facing docs describe the field.
