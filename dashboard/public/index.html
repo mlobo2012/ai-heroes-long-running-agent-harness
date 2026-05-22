@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Heroes Harness Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">AI Heroes / Harness live desk</p>
+          <h1>Long-running agent monitor</h1>
+        </div>
+        <div class="refresh-panel">
+          <div class="live-mark" id="liveMark">Loading</div>
+          <button id="refreshButton" type="button">Refresh</button>
+          <p id="refreshCopy">Next refresh in 30s</p>
+        </div>
+      </header>
+
+      <nav class="agent-tabs" id="agentTabs" aria-label="Harness agents"></nav>
+
+      <section class="goal-strip" aria-label="Current goal">
+        <div>
+          <p class="label">Active goal</p>
+          <h2 id="goalTitle">Loading harness state</h2>
+        </div>
+        <dl class="facts">
+          <div>
+            <dt>Policy</dt>
+            <dd id="scopePolicy">-</dd>
+          </div>
+          <div>
+            <dt>Session</dt>
+            <dd id="sessionId">-</dd>
+          </div>
+          <div>
+            <dt>Branch</dt>
+            <dd id="branch">-</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="scoreboard" aria-label="Harness score">
+        <article>
+          <span class="metric" id="passMetric">0 / 0</span>
+          <span class="metric-label">criteria passing</span>
+        </article>
+        <article>
+          <span class="metric" id="failMetric">0</span>
+          <span class="metric-label">open criteria</span>
+        </article>
+        <article>
+          <span class="metric" id="heartbeatMetric">-</span>
+          <span class="metric-label">last heartbeat</span>
+        </article>
+        <article>
+          <span class="metric" id="dirtyMetric">-</span>
+          <span class="metric-label">working tree</span>
+        </article>
+      </section>
+
+      <section class="progress-line" aria-label="Progress">
+        <div class="progress-track"><div id="progressBar"></div></div>
+        <p id="progressText">Waiting for state.</p>
+      </section>
+
+      <section class="layout">
+        <section class="panel primary-panel">
+          <div class="panel-head">
+            <p class="label">Now</p>
+            <h3>What the agent is working on</h3>
+          </div>
+          <div id="currentWork" class="work-list"></div>
+          <div class="divider"></div>
+          <div class="panel-head compact">
+            <p class="label">Latest harness action</p>
+            <h3 id="codexName">No spawn log yet</h3>
+          </div>
+          <p id="codexSummary" class="codex-summary">Waiting for executor state.</p>
+          <pre id="codexTail" class="terminal"></pre>
+        </section>
+
+        <aside class="panel side-panel">
+          <div class="panel-head">
+            <p class="label">Open</p>
+            <h3>Remaining criteria</h3>
+          </div>
+          <div id="failingList" class="criteria-list"></div>
+        </aside>
+      </section>
+
+      <section class="layout lower">
+        <section class="panel">
+          <div class="panel-head">
+            <p class="label">Repository</p>
+            <h3>Changed files</h3>
+          </div>
+          <p class="panel-copy">Files touched by the active harness run, with short impact summaries.</p>
+          <div id="changedFiles" class="file-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <p class="label">Safety</p>
+            <h3>Blockers and verdicts</h3>
+          </div>
+          <p class="panel-copy">Open blocker records and evaluator verdicts that decide whether the run can finish.</p>
+          <div id="blockers" class="blocker-list"></div>
+          <div class="mini-feed" id="verdicts"></div>
+        </section>
+      </section>
+
+      <footer class="footer">
+        <span id="workspace">-</span>
+        <span id="updatedAt">-</span>
+      </footer>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
