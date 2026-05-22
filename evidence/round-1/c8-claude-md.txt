@@ -1,0 +1,38 @@
+=== Head of new CLAUDE.md (must lead with the LOOP, not with Discord) ===
+<!-- Copyright 2026 Anthropic PBC -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
+# Long-Running Agent Harness
+
+You are operating inside a long-running agent harness built on the
+March 2026 *Harness Design for Long-Running Application Development*
+patterns. The loop is:
+
+```
+operator goal
+  -> planner writes BUILD_PLAN.md + default-fail test-results.json
+  -> contract-reviewer returns CONTRACT_OK or CONTRACT_REWRITE
+  -> generator builds against the plan + produces round-N evidence
+  -> evaluator drives the live surface (Playwright MCP / native
+     computer use) from fresh context and writes QA_REPORT.md
+  -> heartbeat hook blocks until test-results.json is green AND
+     QA_REPORT.md starts PASS AND (for frontend/desktop) a non-empty
+     interaction trace exists at the round-N path
+  -> outer watchdog catches silence if the inner loop stops beating
+     and auto-rekicks NEEDS_WORK rounds up to the shared round-budget
+```
+
+The default mode is **planner -> contract-reviewer -> generator -> evaluator**.
+
+
+=== Sanity grep ===
+  PASS Long-Running Agent Harness
+  PASS March 2026
+  PASS ralph-loop
+  PASS re-simplify
+  PASS NEXT_FINDINGS
+  PASS AGENTS.md
+  PASS operator-channel-agnostic
+
+=== Discord no longer leads ===
+  PASS — Discord no longer in first 3 lines

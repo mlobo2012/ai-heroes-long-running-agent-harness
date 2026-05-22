@@ -80,12 +80,42 @@ cd "$EVAL_DIR"
 
 PROMPT="Run the evaluator agent. Read BUILD_PLAN.md, test-results.json, the diff, and every evidence path. For UI tasks drive the running app via Playwright MCP and write the trace under playwright-mcp/round-N/. For desktop tasks drive the system via native computer-use and write the session log under computer-use/round-N/. Write QA_REPORT.md with a bare PASS or NEEDS_WORK on line 1."
 
+mkdir -p "$EVAL_DIR/.claude/goal-state"
 claude -p --agent evaluator "$PROMPT" \
   > "$EVAL_DIR/.claude/goal-state/evaluator-stdout.log" 2>&1 || true
 
 [ -f "$EVAL_DIR/QA_REPORT.md" ] || { echo "run-evaluator: evaluator did not write QA_REPORT.md" >&2; exit 3; }
 
 verdict=$(sed -n '/^[[:space:]]*$/d; s/[[:space:]]*$//; 1p' "$EVAL_DIR/QA_REPORT.md")
+
+# NEXT_FINDINGS carry-forward. On NEEDS_WORK, copy the actionable
+# findings into NEXT_FINDINGS.md so the next builder session
+# (whether kicked by ralph-loop, the watchdog --kick, or the operator)
+# opens with the previous evaluator's findings already surfaced.
+if [ "$verdict" = "NEEDS_WORK" ]; then
+  python3 - "$EVAL_DIR/QA_REPORT.md" "$WORKSPACE/NEXT_FINDINGS.md" <<'PY' 2>/dev/null || true
+import sys
+from pathlib import Path
+qa, nf = sys.argv[1:3]
+src, dst = Path(qa), Path(nf)
+if not src.is_file():
+    sys.exit(0)
+text = src.read_text(encoding="utf-8", errors="ignore")
+lo = text.find("Specific findings")
+body = text[lo:] if lo != -1 else text
+dst.write_text(
+    "# NEXT_FINDINGS\n\n"
+    "Captured from the most recent QA_REPORT.md after a NEEDS_WORK\n"
+    "verdict. The next builder turn must address these before opening\n"
+    "new ground.\n\n" + body,
+    encoding="utf-8",
+)
+PY
+elif [ "$verdict" = "PASS" ]; then
+  # Clean up the carry-forward so it doesn't haunt the next session.
+  rm -f "$WORKSPACE/NEXT_FINDINGS.md"
+fi
+
 case "$verdict" in
   PASS)
     # Cross-check interaction-evidence gate when the rubric demands it.
@@ -95,11 +125,18 @@ case "$verdict" in
     fi
     case "$rubric" in
       frontend|desktop)
-        # Require at least one non-empty trace.
+        # Strict-named preferred shapes first, then any non-empty file
+        # under a round-* directory. Same floor as the heartbeat hook
+        # and the watchdog.
         traces=$(find "$EVAL_DIR/playwright-mcp" -type f -name 'trace.zip' -size +0c 2>/dev/null | head -1)
         cusess=$(find "$EVAL_DIR/computer-use" -type f -name 'session.jsonl' -size +0c 2>/dev/null | head -1)
         if [ -z "$traces" ] && [ -z "$cusess" ]; then
-          echo "run-evaluator: rubric=$rubric requires interaction evidence; none found under playwright-mcp/round-*/trace.zip or computer-use/round-*/session.jsonl" >&2
+          # Fallback: any non-empty file under playwright-mcp/round-* or computer-use/round-*.
+          traces=$(find "$EVAL_DIR/playwright-mcp" -type d -name 'round-*' -exec find {} -type f -size +0c \; 2>/dev/null | head -1)
+          cusess=$(find "$EVAL_DIR/computer-use" -type d -name 'round-*' -exec find {} -type f -size +0c \; 2>/dev/null | head -1)
+        fi
+        if [ -z "$traces" ] && [ -z "$cusess" ]; then
+          echo "run-evaluator: rubric=$rubric requires interaction evidence; none found under playwright-mcp/round-*/ or computer-use/round-*/" >&2
           exit 4
         fi
         ;;

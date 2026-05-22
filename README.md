@@ -2,7 +2,7 @@
 
 A two-pulse harness for **Claude Code** that lets an agent work on a real goal for hours without going silently dead.
 
-The current shape follows Anthropic's March 2026 long-running-app harness direction: plan first against a four-axis rubric, **handshake on the contract** before building, build against the contract, **drive the live surface** with Playwright MCP or native computer use, evaluate from fresh context, then loop until the evaluator says PASS. The AI Heroes additions are the outer watchdog with active re-kick, per-criterion evidence linkage, a Bash-bypass gate, a SessionStart/PreCompact pair for context anxiety, a rubric library (frontend/api/library/data-pipeline/**desktop**), a **contract-reviewer handshake**, **interaction-evidence enforcement** (Playwright trace OR computer-use session log), evaluator calibration capture, per-round artifact namespacing, a **bench rig**, headless entry points, worktree-isolated evaluator, model/rubric stamping on every round, a pinned Codex executor, and OpenClaw/Discord operator ergonomics.
+The current shape follows Anthropic's March 2026 long-running-app harness direction: plan first against a four-axis rubric, **handshake on the contract** before building, build against the contract, **drive the live surface** with Playwright MCP or native computer use, evaluate from fresh context, then loop until the evaluator says PASS. The AI Heroes additions are the outer watchdog with active re-kick, per-criterion evidence linkage, a Bash-bypass gate, a SessionStart/PreCompact pair for context anxiety, a rubric library (frontend/api/library/data-pipeline/**desktop**), a **contract-reviewer handshake**, **interaction-evidence enforcement** (Playwright trace OR computer-use session log) with non-canonical-filename fallback, evaluator calibration capture, per-round artifact namespacing, a **bench rig**, headless entry points, worktree-isolated evaluator, model/rubric stamping on every round, a pinned Codex executor with **AGENTS.md** seeded for parity, a **`scripts/ralph-loop.sh` unattended driver** with `NEXT_FINDINGS.md` carry-forward, a **`scripts/re-simplify.sh`** procedure that lets you bench whether each harness piece is still load-bearing after a model upgrade, an **Agent SDK equivalence doc** that maps every hook to a `PreToolUse`/`Stop` callback, and OpenClaw/Discord operator ergonomics.
 
 Built on top of Anthropic's published work:
 
@@ -165,8 +165,10 @@ no trace, and the heartbeat hook will reject `PASS` either way.
 | `~/.claude/goal-sessions/active.jsonl` | Source of truth for the outer watchdog. |
 | `scripts/calibrate-evaluator.sh` | Record an operator override so the next evaluator round sees it. |
 | `scripts/diff-rounds.sh A B` | Markdown diff between round A and B (verdicts, axis scores, criterion deltas, artifact counts). |
-| `scripts/run-evaluator.sh [--isolated]` | Run the evaluator headless; `--isolated` uses a throwaway `git worktree`. |
+| `scripts/run-evaluator.sh [--isolated]` | Run the evaluator headless; `--isolated` uses a throwaway `git worktree`. Writes `NEXT_FINDINGS.md` on NEEDS_WORK. |
 | `scripts/run-contract-review.sh` | Run the contract-reviewer headless against `BUILD_PLAN.md`. |
+| `scripts/ralph-loop.sh` | Unattended build -> evaluate -> rebuild driver. Honors the shared round-budget file. Writes `NEXT_FINDINGS.md` after every NEEDS_WORK and `ESCALATION.md` when the budget is exhausted. |
+| `scripts/re-simplify.sh` | Disable one harness piece, re-run the bench, decide if it is still load-bearing on the current model. |
 | `scripts/bench-harness.sh + bench-score.py` | End-to-end bench rig and score-diff tool. |
 
 ### Context anxiety mitigations
@@ -177,6 +179,43 @@ no trace, and the heartbeat hook will reject `PASS` either way.
 ### Active outer driver
 
 `scripts/goal-watchdog.py --kick --max-rounds N` turns the watchdog from a passive smoke alarm into an auto-pilot. When the builder finishes cleanly with `QA_REPORT.md` = `NEEDS_WORK` and the last beat is fresh, the watchdog launches the next build round via the registered launcher. It escalates to `ESCALATION.md` when the round budget is exhausted, so a stuck loop becomes a visible operator event instead of an infinite cost burn.
+
+### In-repo unattended loop
+
+`scripts/ralph-loop.sh` is the in-repo equivalent of the upstream wrapper from `cwc-long-running-agents`. Runs build -> evaluate -> rebuild headless using `claude -p` until the heartbeat would accept goal-completion or the shared round-budget is hit. Writes `NEXT_FINDINGS.md` after every NEEDS_WORK round so the next builder turn opens with the previous evaluator's actionable bullets already on top. Run it locally; use the watchdog only when you also need the external auto-pilot.
+
+```bash
+scripts/ralph-loop.sh --workspace "$PWD" --isolated-evaluator
+```
+
+### Re-simplify on model upgrade
+
+`scripts/re-simplify.sh` lets the operator disable one harness piece, re-run the bench rig, and decide whether the piece is still load-bearing on the current model. Combined with the `model` stamp `rounds.json` records per round, this makes "is X still earning its complexity?" measurable instead of aesthetic.
+
+```bash
+scripts/re-simplify.sh --target playwright-trace --reason "test on opus-4-7"
+scripts/bench-harness.sh --pilot express-server --workspace /tmp/bench-w-override
+scripts/re-simplify.sh --restore --target playwright-trace
+scripts/bench-harness.sh --pilot express-server --workspace /tmp/bench-baseline
+scripts/bench-score.py /tmp/bench-baseline/.../bench-score.json /tmp/bench-w-override/.../bench-score.json
+```
+
+### Agent SDK equivalence
+
+`docs/agent-sdk-equivalent.md` maps every bash hook to its `PreToolUse` / `Stop` / `SessionStart` / `PreCompact` callback equivalent on the [Claude Agent SDK](https://docs.claude.com/en/docs/claude-code/sdk). Use this when you're not running Claude Code but want the same harness primitives. A runnable Python skeleton lives under `docs/sdk-example/` to seed an SDK port.
+
+### Slash commands
+
+When the plugin is loaded, six slash commands are available inside the Claude Code session:
+
+| Command       | What it does |
+|---------------|--------------|
+| `/orient`     | Re-read BUILD_PLAN / PROGRESS / QA_REPORT / NEXT_FINDINGS / STEER / git log / smoke test. One-keystroke re-orientation. |
+| `/blueprint`  | Invoke the planner subagent against an operator goal. |
+| `/qa`         | Invoke the evaluator subagent against the current contract. |
+| `/simplify`   | Wrapper for `scripts/re-simplify.sh` with every target's effect documented inline. |
+| `/bench`      | Wrapper for `scripts/bench-harness.sh`. |
+| `/round N`    | List artifacts under round-N directories and diff against round-(N-1). |
 
 ---
 
@@ -283,9 +322,10 @@ The executor refuses `gpt-5.5-codex` and `gpt-5.4`. Both fail loud.
 "$HOME/.claude/plugins/discord-long-running-harness/scripts/verify-install.sh"
 ```
 
-48 PASS checks, exit 0. OpenClaw is not required. Four codex-related
+76 PASS checks, exit 0. OpenClaw is not required. Four codex-related
 checks may FAIL on environments without `codex` and
-`~/.claude/codex-current-model.env`; that is expected.
+`~/.claude/codex-current-model.env`; that is expected — seed the env
+file with `CODEX_MODEL=gpt-5.5` to flip them green.
 
 ---
 
@@ -393,17 +433,21 @@ bin/
   codex-spawn.sh                         # Reads pinned CODEX_MODEL and invokes Codex
   enable-for-launcher.sh                 # Safe rollout helper
 scripts/
-  register-goal.sh                       # Registers a goal session; accepts --rubric, --model, --codex-model, --round-budget
-  goal-watchdog.py                       # Standalone outer pulse watchdog; --kick + --max-rounds with shared budget file
+  register-goal.sh                       # Registers a goal session; accepts --rubric, --model, --codex-model, --round-budget; seeds AGENTS.md too
+  goal-watchdog.py                       # Standalone outer pulse watchdog; --kick + --max-rounds with shared budget file; non-canonical trace/session-log fallback
+  ralph-loop.sh                          # Unattended build->evaluate->rebuild driver; writes NEXT_FINDINGS.md on every NEEDS_WORK
+  re-simplify.sh                         # Disable a harness piece, re-bench, decide if it's still load-bearing on this model
   run-contract-review.sh                 # Headless wrapper around the contract-reviewer subagent
-  run-evaluator.sh                       # Headless evaluator; --isolated runs in a git worktree
+  run-evaluator.sh                       # Headless evaluator; --isolated runs in a git worktree; writes NEXT_FINDINGS.md on NEEDS_WORK
   calibrate-evaluator.sh                 # Operator override capture for the evaluator-calibration corpus
   diff-rounds.sh                         # Markdown diff between any two rounds (verdicts, scores, artifacts)
   bench-harness.sh                       # Bench rig — runs a pilot end-to-end and writes a score JSON
   bench-score.py                         # Compares two score JSONs (e.g. upstream vs this harness)
-  verify-install.sh                      # 48 PASS checks
+  verify-install.sh                      # 76 PASS checks
 bench/
   pilots/express-server/                 # Starter pilot for the bench rig (small but real)
+docs/
+  agent-sdk-equivalent.md                # Maps every bash hook to its Agent SDK PreToolUse/Stop callback
 ```
 
 ### A note on Discord

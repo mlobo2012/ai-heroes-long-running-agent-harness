@@ -1,0 +1,21 @@
+INPUT_PATH=evidence/round-1/sample.txt
+INPUT_PATH=playwright-mcp/round-1/trace.zip
+INPUT_PATH=computer-use/round-1/session.jsonl
+INPUT_PATH=screenshots/round-1/c1.png
+INPUT_PATH=evidence/round-1/x.log
+INPUT_PATH=evidence/round-1/x.jsonl
+INPUT_PATH=notes/random.md
+---LOG CONTENTS (should include all 6 of the round-N + extension matches, exclude notes/random.md)---
+evidence/round-1/sample.txt
+/home/user/ai-heroes-long-running-agent-harness/evidence/round-1/sample.txt
+playwright-mcp/round-1/trace.zip
+/home/user/ai-heroes-long-running-agent-harness/playwright-mcp/round-1/trace.zip
+computer-use/round-1/session.jsonl
+/home/user/ai-heroes-long-running-agent-harness/computer-use/round-1/session.jsonl
+screenshots/round-1/c1.png
+/home/user/ai-heroes-long-running-agent-harness/screenshots/round-1/c1.png
+evidence/round-1/x.log
+/home/user/ai-heroes-long-running-agent-harness/evidence/round-1/x.log
+evidence/round-1/x.jsonl
+/home/user/ai-heroes-long-running-agent-harness/evidence/round-1/x.jsonl
+---END---

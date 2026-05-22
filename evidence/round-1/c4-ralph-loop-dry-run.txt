@@ -1,0 +1,50 @@
+=== ralph-loop --help ===
+Usage: ralph-loop.sh [--workspace <abs_path>] [--max-rounds N]
+                     [--isolated-evaluator] [--build-prompt "<text>"]
+                     [--dry-run] [--no-evaluator]
+
+Runs the build -> evaluate -> rebuild cycle headless until the
+heartbeat hook would accept goal-completion or the round budget is hit.
+
+  --workspace          Workspace root (default: $PWD).
+  --max-rounds         Override the round budget cap. By default reads
+                       .claude/goal-state/round-budget (or 8).
+  --isolated-evaluator Run the evaluator inside `git worktree add`.
+  --build-prompt       Custom builder prompt (default: orient + build).
+  --no-evaluator       Skip the evaluator call (useful for measuring
+                       baseline builder behavior in benches).
+  --dry-run            Print what would be invoked and exit 0.
+
+Reads:
+  BUILD_PLAN.md, test-results.json, QA_REPORT.md, NEXT_FINDINGS.md,
+  .claude/goal-state/{goal-state.json,round-budget,rounds.json}
+
+Writes:
+  NEXT_FINDINGS.md (each NEEDS_WORK round),
+  .claude/goal-state/ralph-loop.jsonl (one line per round attempted),
+  .claude/goal-state/ralph-loop-build-N.log,
+  .claude/goal-state/ralph-loop-eval-N.log
+
+=== dry-run from a workspace with a valid contract ===
+ralph-loop: workspace=/tmp/tmp.A5VamzdLY1/ws
+ralph-loop: effective_budget=5
+ralph-loop: rubric=library
+ralph-loop: isolated_evaluator=0
+ralph-loop: would invoke for each round:
+  builder: claude -p "Read BUILD_PLAN.md and PROGRESS.md. If NEXT_FINDINGS.md exists, treat its bullets as the top of the queue. Build the next unfinished criterion from test-results.json. Produce the declared round-N evidence at the declared paths and Read each before flipping a criterion to passing. Update PROGRESS.md when you complete a coherent unit."
+  evaluator: scripts/run-evaluator.sh --workspace /tmp/tmp.A5VamzdLY1/ws
+
+=== refuses to run without a contract (exit 3) ===
+ralph-loop: test-results.json missing — invoke the planner agent first
+exit=3
+
+=== refuses on unknown flag (exit 2) ===
+ralph-loop: unknown arg: --not-a-flag
+Usage: ralph-loop.sh [--workspace <abs_path>] [--max-rounds N]
+                     [--isolated-evaluator] [--build-prompt "<text>"]
+                     [--dry-run] [--no-evaluator]
+
+exit=0
+
+=== honors --max-rounds override over round-budget file ===
+ralph-loop: effective_budget=12

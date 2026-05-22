@@ -1,0 +1,73 @@
+=== Planner contract declares round-N paths ===
+   - **Use round-N namespacing.** Put evidence under
+     `screenshots/round-1/c1-desktop.png`, `evidence/round-1/c1-curl.txt`,
+   - frontend -> `playwright-mcp/round-N/trace.zip` plus screenshots.
+   - desktop  -> `computer-use/round-N/session.jsonl` plus screenshots
+     under `computer-use/round-N/screenshots/`.
+      "evidence_paths": ["screenshots/round-1/c1-desktop.png", "screenshots/round-1/c1-mobile.png"],
+
+=== Evaluator writes to round-N ===
+     Save the trace at exactly `playwright-mcp/round-N/trace.zip` (the
+     `screenshots/round-N/`.
+     `computer-use/round-N/session.jsonl` as one JSON object per line.
+     Save screenshots to `computer-use/round-N/screenshots/`.
+Every round, you produce evidence under a fresh `round-N/` directory.
+- For frontend rubrics: a non-empty `playwright-mcp/round-N/trace.zip`
+- For desktop rubrics: a non-empty `computer-use/round-N/session.jsonl`
+  round-N directory.
+
+=== Heartbeat checks round-* via has_interaction_evidence ===
+# value. The watchdog reads .claude/goal-state/round-budget when present.
+if [ -f "$STATE_DIR/round-budget" ]; then
+  rb=$(sed -n '1p' "$STATE_DIR/round-budget" 2>/dev/null || true)
+# at least one non-empty artifact under the round-namespaced path. The
+# `playwright-mcp/round-*/` or `computer-use/round-*/` so a contract
+    # Fallback: any non-empty file under the round-namespaced dirs.
+    if find "$WORKDIR/playwright-mcp" -type d -name 'round-*' 2>/dev/null | while read -r d; do
+    if find "$WORKDIR/computer-use" -type d -name 'round-*' 2>/dev/null | while read -r d; do
+        # playwright-mcp/round-N/trace.zip OR a computer-use session log
+        # under computer-use/round-N/session.jsonl before PASS sticks.
+
+=== Watchdog mirrors the same check ===
+    first; falls back to any non-empty regular file under a round-
+    # Fallback: any non-empty regular file under a round-* directory.
+            for round_dir in root.glob("round-*"):
+    rb_file = workspace / ".claude" / "goal-state" / "round-budget"
+                # Honor the shared round-budget file (set by register-goal
+                # --round-budget). Inner-loop heartbeat reads the same file.
+
+=== register-goal seeds round-1 evidence directories ===
+  After register --rubric frontend:
+/tmp/tmp.bs7mAjPZnf/ws/screenshots/round-1
+/tmp/tmp.bs7mAjPZnf/ws/playwright-mcp/round-1
+
+register-goal: workspace does not exist: /tmp/tmp.bs7mAjPZnf/ws/d
+  After register --rubric desktop:
+/tmp/tmp.bs7mAjPZnf/ws2/computer-use/round-1
+/tmp/tmp.bs7mAjPZnf/ws2/screenshots/round-1
+
+=== diff-rounds tool exists and inspects round-N artifacts ===
+#   - artifact paths under screenshots/round-A vs round-B,
+#     playwright-mcp/round-A vs round-B, computer-use/round-A vs round-B
+ROUND_DIR_A=".claude/goal-state/round-archives/round-${A}"
+ROUND_DIR_B=".claude/goal-state/round-archives/round-${B}"
+
+=== this very session uses round-1 for its own evidence ===
+total 56
+drwxr-xr-x 2 root root 4096 May 22 07:15 .
+drwxr-xr-x 3 root root 4096 May 22 07:04 ..
+-rw-r--r-- 1 root root 1006 May 22 07:05 c1-track-read.txt
+-rw-r--r-- 1 root root 1839 May 22 07:12 c10-bench-delta.txt
+-rw-r--r-- 1 root root 3380 May 22 07:15 c11-verify-install.txt
+-rw-r--r-- 1 root root 2955 May 22 07:15 c12-round-namespacing.txt
+-rw-r--r-- 1 root root 1188 May 22 07:06 c2-evaluator-tools.txt
+-rw-r--r-- 1 root root  507 May 22 07:06 c3-trace-fallback.txt
+-rw-r--r-- 1 root root 2380 May 22 07:07 c4-ralph-loop-dry-run.txt
+-rw-r--r-- 1 root root 1252 May 22 07:08 c5-next-findings.txt
+-rw-r--r-- 1 root root 1525 May 22 07:09 c6-agents-md.txt
+-rw-r--r-- 1 root root 1511 May 22 07:10 c7-re-simplify.txt
+-rw-r--r-- 1 root root 1356 May 22 07:11 c8-claude-md.txt
+-rw-r--r-- 1 root root 3237 May 22 07:12 c9-sdk-doc.txt
+-rw-r--r-- 1 root root    0 May 22 07:05 sample.txt
+-rw-r--r-- 1 root root    0 May 22 07:05 x.jsonl
+-rw-r--r-- 1 root root    0 May 22 07:05 x.log

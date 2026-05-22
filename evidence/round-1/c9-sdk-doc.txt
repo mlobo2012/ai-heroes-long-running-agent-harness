@@ -1,0 +1,52 @@
+=== head of docs/agent-sdk-equivalent.md ===
+# Agent SDK equivalence
+
+This harness ships as Claude Code hooks and subagents. The March 2026
+*Harness Design for Long-Running Application Development* article
+states (in "Going further"): "The same patterns translate directly to
+`PreToolUse`/`Stop` callbacks in the Agent SDK." This document spells
+out the mapping piece by piece, so a team running on the
+[Claude Agent SDK](https://docs.claude.com/en/docs/claude-code/sdk)
+can adopt the same architecture without porting bash.
+
+Every row tells you: what the bash hook does, what to wire in the SDK,
+and whether the SDK version is a callback (sync), a stream subscriber
+(async), or a wrapper around a `query()` call.
+
+## Inner-loop primitives
+
+| Bash hook                       | SDK equivalent                                                                                   | Shape       |
+|---------------------------------|--------------------------------------------------------------------------------------------------|-------------|
+| `hooks/track-read.sh`           | `PreToolUse` callback on the `Read` tool — append to an evidence-reads list in your run state    | Sync        |
+| `hooks/verify-gate.sh`          | `PreToolUse` callback on `Write`/`Edit` — block when target is `test-results.json` and proposed criterion flips passes:true without matching evidence_paths in the reads list | Sync, may block |
+| `hooks/verify-gate-bash.sh`     | `PreToolUse` callback on `Bash` — block when command writes the results file via `sed`/`jq`/`python`/redirect without prior evidence reads | Sync, may block |
+| `hooks/heartbeat-stop.sh`       | `Stop` callback — re-check `test-results.json` greenness, QA verdict, and interaction trace; block (raise) until met | Sync, may block |
+| `hooks/commit-on-stop.sh`       | `Stop` callback (second handler) — `git commit -am` tracked changes                              | Sync        |
+| `hooks/kill-switch.sh`          | `PreToolUse` callback on all tools — block when `AGENT_STOP` file exists                         | Sync, may block |
+| `hooks/steer.sh`                | `PreToolUse` callback on all tools — read+clear `STEER.md`, raise as a steering message          | Sync, may block |
+| `hooks/session-start.sh`        | `SessionStart` callback (or wrap the first `query()` call) — emit the orientation block to the model as a system message | Sync, additive context |
+| `hooks/pre-compact.sh`          | `PreCompact` callback — snapshot acceptance contract before history compaction                   | Sync        |
+| `hooks/discord-notify.sh`       | `Stop` callback — POST goal-state delta to a webhook                                             | Sync, fire-and-forget |
+
+### Sketch — `PreToolUse` evidence gate in the SDK
+
+```python
+from claude_agent_sdk import query, PreToolUseHook, BlockToolCall
+import json, os, pathlib
+
+EVIDENCE = set()
+
+def track_read(tool_name, tool_input):
+    if tool_name == "Read":
+        p = tool_input.get("file_path") or ""
+
+=== mapping table sanity ===
+  PASS PreToolUse
+  PASS Stop
+  PASS SessionStart
+  PASS PreCompact
+  PASS BlockToolCall
+  PASS BlockStop
+  PASS ralph-loop
+  PASS fresh-context
+  PASS goal-watchdog

@@ -1,0 +1,6 @@
+=== without override: bash gate blocks sed -i s/false/true/ test-results.json ===
+{"decision":"block","reason":"Cannot write to the results file via Bash without first opening evidence with the Read tool. The verify-gate-bash hook caught a write attempt (sed/jq/python/redirect) targeting test-results.json. Read the relevant evidence file first, then retry."}
+
+=== set override + retry ===
+stdout: []
+  PASS — no block JSON emitted (gate disabled)

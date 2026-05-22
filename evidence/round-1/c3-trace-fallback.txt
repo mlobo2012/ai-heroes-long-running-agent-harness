@@ -1,0 +1,12 @@
+=== Test 1: heartbeat with non-trace.zip file under playwright-mcp/round-1/ (e.g. trace.network) ===
+rc=0
+
+=== Test 2: heartbeat with non-session.jsonl file under computer-use/round-1/ (e.g. actions.jsonl) ===
+rc=0
+
+=== Test 3: heartbeat correctly STILL blocks when no interaction artifact at all ===
+{"decision":"block","reason":"missing-interaction-evidence:frontend; continue"}
+rc=2
+
+=== Test 4: watchdog goal_is_complete fallback with non-canonical filename ===
+goal_is_complete with captured.har: True

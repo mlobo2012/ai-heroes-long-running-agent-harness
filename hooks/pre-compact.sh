@@ -14,6 +14,23 @@ set -u
 WORKDIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 STATE_DIR="$WORKDIR/.claude/goal-state"
 mkdir -p "$STATE_DIR"
+
+# re-simplify override: operator can disable the pre-compact snapshot
+# to bench whether it is still load-bearing on the current model.
+if [ -f "$STATE_DIR/re-simplify-overrides.json" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "pre-compact" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$STATE_DIR/re-simplify-overrides.json" 2>/dev/null; then
+    echo "## Pre-compact snapshot skipped (re-simplify --target pre-compact)"
+    exit 0
+  fi
+fi
+
 SNAPSHOT="$STATE_DIR/post-compact-orientation.md"
 
 {

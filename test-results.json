@@ -1,0 +1,34 @@
+{
+  "criteria": [
+    {
+      "id": "C22",
+      "description": "planner agent documents the sprint-decomposition re-simplify override",
+      "evidence_paths": ["evidence/round-3/c22-sprint-decomposition.txt"],
+      "passes": true
+    },
+    {
+      "id": "C23",
+      "description": "docs/sdk-example/ ships a runnable Python skeleton that parses",
+      "evidence_paths": ["evidence/round-3/c23-sdk-example.txt"],
+      "passes": true
+    },
+    {
+      "id": "C24",
+      "description": "README documents all six slash commands",
+      "evidence_paths": ["evidence/round-3/c24-readme-commands.txt"],
+      "passes": true
+    },
+    {
+      "id": "C25",
+      "description": "README PASS-check count updated to 76",
+      "evidence_paths": ["evidence/round-3/c25-readme-count.txt"],
+      "passes": true
+    },
+    {
+      "id": "C26",
+      "description": "verify-install grows to 80 checks covering C22-C25 and stays green",
+      "evidence_paths": ["evidence/round-3/c26-verify-install.txt"],
+      "passes": true
+    }
+  ]
+}

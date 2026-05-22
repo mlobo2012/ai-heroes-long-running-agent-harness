@@ -1,0 +1,46 @@
+=== files seeded ===
+-rw-r--r-- 1 root root 2175 May 22 07:09 AGENTS.md
+-rw-r--r-- 1 root root  447 May 22 07:09 BUILD_PLAN.md
+-rw-r--r-- 1 root root  269 May 22 07:09 PROGRESS.md
+-rwxr-xr-x 1 root root  290 May 22 07:09 init.sh
+
+=== head of AGENTS.md ===
+# AGENTS
+
+This workspace is governed by a long-running agent harness. The
+contract is the same whether you are Claude, Codex, or another agent
+implementation. Follow it.
+
+## Always start here
+
+1. Read `BUILD_PLAN.md` if it exists.
+2. Read `PROGRESS.md` if it exists.
+3. Read `QA_REPORT.md` if it exists.
+4. Read `NEXT_FINDINGS.md` if it exists (these are the open items the
+   previous evaluator round flagged).
+5. Read `STEER.md` if it exists (operator overrides).
+6. Run `git log --oneline -10`.
+
+If `BUILD_PLAN.md` does not exist, invoke the planner agent (or
+create the same structure manually) before implementation.
+
+## Proof before passing
+
+A criterion is only "passing" after you have:
+
+1. Run it against the real target.
+2. Produced evidence at the path declared in `BUILD_PLAN.md` under
+   the current round's namespace (`screenshots/round-N/...`,
+   `evidence/round-N/...`, `playwright-mcp/round-N/trace.zip`,
+   `computer-use/round-N/session.jsonl`).
+3. Opened the evidence file with your environment's Read tool.
+4. Confirmed the evidence shows what it should.
+
+=== AGENTS.md mentions NEXT_FINDINGS, evaluator gate, and verify-gate ===
+  PASS NEXT_FINDINGS
+  PASS QA_REPORT
+  PASS evidence
+  PASS verify-gate
+  PASS AGENT_STOP
+  PASS STEER
+  PASS PROGRESS

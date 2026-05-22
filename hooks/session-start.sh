@@ -12,6 +12,22 @@ set -u
 WORKDIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 cd "$WORKDIR" || exit 0
 
+# re-simplify override: operator can disable session-start re-seed to
+# bench whether the re-seed is still load-bearing on the current model.
+if [ -f "$WORKDIR/.claude/goal-state/re-simplify-overrides.json" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "session-start" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$WORKDIR/.claude/goal-state/re-simplify-overrides.json" 2>/dev/null; then
+    echo "## Session orientation skipped (re-simplify --target session-start)"
+    exit 0
+  fi
+fi
+
 emit() { printf '%s\n' "$1"; }
 
 emit "## Session orientation (auto-seeded by session-start hook)"
@@ -80,6 +96,23 @@ if [ -f "$WORKDIR/QA_REPORT.md" ]; then
     emit ""
     sed -n '/Specific findings/,/Regression risk/p' "$WORKDIR/QA_REPORT.md" 2>/dev/null | head -60
   fi
+  emit ""
+fi
+
+# NEXT_FINDINGS.md carry-forward — written by the evaluator wrapper /
+# ralph-loop after a NEEDS_WORK round. Surface it at the top of the new
+# session so the builder doesn't redo the previous turn's work.
+if [ -s "$WORKDIR/NEXT_FINDINGS.md" ]; then
+  emit "### NEXT_FINDINGS.md — open items from the prior evaluator round"
+  emit ""
+  emit "These bullets are the top of the queue for this session. Address them"
+  emit "before opening new ground. The file is rewritten on every NEEDS_WORK"
+  emit "round, so don't mark anything done by 'fixing the file' — fix the"
+  emit "underlying issue and let the next evaluator round overwrite it."
+  emit ""
+  emit '```markdown'
+  head -120 "$WORKDIR/NEXT_FINDINGS.md"
+  emit '```'
   emit ""
 fi
 

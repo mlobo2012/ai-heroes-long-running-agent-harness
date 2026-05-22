@@ -1,0 +1,39 @@
+=== environment probe ===
+  claude CLI: 2.1.148 (Claude Code)
+  node: v22.22.2
+  npx: 10.9.7
+
+=== bench-harness against express-server pilot (10s timeout to exercise the rig surface) ===
+bench-harness: pilot=express-server workspace=/tmp/tmp.WH1Cl8UMod/bench-ws started=2026-05-22T07:26:59Z
+  "wall_clock_seconds": 10,
+  "rounds_to_pass": 0,
+  "completed": false,
+  exit: 1 (1 = timed out before completion, expected for 10s budget without /goal kick)
+
+  Score JSON written:
+total 12
+drwxr-xr-x 2 root root 4096 May 22 07:27 .
+drwxr-xr-x 3 root root 4096 May 22 07:26 ..
+-rw-r--r-- 1 root root  303 May 22 07:27 bench-score.json
+
+=== bench-score.py diff between baseline and candidate ===
+  (See evidence/round-1/c10-bench-delta.txt for the full delta surface.
+   This run re-validates with fresh JSON.)
+Pilot: express-server
+Both completed: True
+
+metric                             baseline      candidate      delta
+----------------------------------------------------------------------
+wall_clock_seconds                      720            290     -59.7%
+rounds_to_pass                            5              2     -60.0%
+total_io_bytes_estimate              480000         195000     -59.4%
+
+
+=== Real Claude headless evaluator (isolated worktree, 120s budget) ===
+Validates that run-evaluator.sh actually invokes claude --agent evaluator
+end-to-end against this very repo's round-1 contract.
+
+evaluator wrapper exit code: 124 (0=PASS, 1=NEEDS_WORK, 4=missing interaction evidence, 124=timeout)
+
+  stdout log (last 30 lines):
+Preparing worktree (detached HEAD 9fdc62d)

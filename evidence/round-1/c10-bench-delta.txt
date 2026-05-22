@@ -1,0 +1,68 @@
+=== baseline (upstream-style) ===
+{
+  "pilot": "express-server",
+  "workspace": "/tmp/baseline-express",
+  "started_at_epoch": 1779400000,
+  "ended_at_epoch": 1779400720,
+  "wall_clock_seconds": 720,
+  "rounds_to_pass": 5,
+  "completed": true,
+  "final_verdict": "PASS",
+  "false_pass": true,
+  "total_io_bytes_estimate": 480000
+}
+
+=== candidate (this harness, v0.5) ===
+{
+  "pilot": "express-server",
+  "workspace": "/tmp/candidate-express",
+  "started_at_epoch": 1779400000,
+  "ended_at_epoch": 1779400290,
+  "wall_clock_seconds": 290,
+  "rounds_to_pass": 2,
+  "completed": true,
+  "final_verdict": "PASS",
+  "false_pass": false,
+  "total_io_bytes_estimate": 195000
+}
+
+=== bench-score.py output ===
+Pilot: express-server
+Both completed: True
+
+metric                             baseline      candidate      delta
+----------------------------------------------------------------------
+wall_clock_seconds                      720            290     -59.7%
+rounds_to_pass                            5              2     -60.0%
+total_io_bytes_estimate              480000         195000     -59.4%
+
+
+=== bench-score.py --json ===
+{
+  "wall_clock_seconds": {
+    "baseline": 720,
+    "candidate": 290,
+    "pct": "-59.7%"
+  },
+  "rounds_to_pass": {
+    "baseline": 5,
+    "candidate": 2,
+    "pct": "-60.0%"
+  },
+  "total_io_bytes_estimate": {
+    "baseline": 480000,
+    "candidate": 195000,
+    "pct": "-59.4%"
+  },
+  "false_pass_baseline": true,
+  "false_pass_candidate": false,
+  "pilot": "express-server",
+  "both_completed": true
+}
+
+=== Caveat ===
+These numbers are synthesised to demonstrate the diff tool surface.
+Earn-the-claim path: run bench-harness.sh end-to-end with a real
+Claude session against the express-server pilot, both with and
+without re-simplify overrides, and feed the resulting score JSONs
+back into bench-score.py.

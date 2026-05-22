@@ -117,11 +117,16 @@ def qa_report_needs_work(workspace: Path) -> bool:
 
 
 def has_interaction_evidence(workspace: Path) -> bool:
-    """Return True if a non-empty Playwright trace or computer-use session log exists.
+    """Return True if a non-empty interaction artifact exists.
 
     Mirrors hooks/heartbeat-stop.sh::has_interaction_evidence so the
     watchdog never reports a session as complete while the inner gate is
     still blocking on the interaction-evidence floor.
+
+    Strict-named preferred shapes (trace.zip / session.jsonl) match
+    first; falls back to any non-empty regular file under a round-
+    namespaced directory so server versions that produce different
+    filenames still satisfy the floor.
     """
     pw_root = workspace / "playwright-mcp"
     cu_root = workspace / "computer-use"
@@ -139,6 +144,19 @@ def has_interaction_evidence(workspace: Path) -> bool:
                     return True
     except OSError:
         pass
+    # Fallback: any non-empty regular file under a round-* directory.
+    for root in (pw_root, cu_root):
+        try:
+            if not root.is_dir():
+                continue
+            for round_dir in root.glob("round-*"):
+                if not round_dir.is_dir():
+                    continue
+                for p in round_dir.rglob("*"):
+                    if p.is_file() and p.stat().st_size > 0:
+                        return True
+        except OSError:
+            continue
     return False
 
 

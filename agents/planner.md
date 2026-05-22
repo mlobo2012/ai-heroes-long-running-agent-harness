@@ -37,7 +37,7 @@ Create or replace `BUILD_PLAN.md` at the project root. It must contain:
    - Desktop / native computer-use / non-browser interactive ->
      `agents/rubrics/desktop.md`
    - If none cleanly fit, pick the closest and document your axis adaptations.
-6. `## Suggested Build Path` - a small sequence of implementation moves. This is guidance, not a rigid sprint plan.
+6. `## Suggested Build Path` - a small sequence of implementation moves. This is guidance, not a rigid sprint plan. **If the operator set the re-simplify override `sprint-decomposition`** (check `.claude/goal-state/re-simplify-overrides.json`), collapse this section to a single bullet: "Build the contract in one coherent pass — sprint decomposition disabled by operator override." This lets the operator bench whether forced sprinting still earns its cost on the current model.
 7. `## Out of Scope` - what not to build.
 8. `## Interaction Evidence` - for frontend or desktop rubrics, declare
    the exact trace path the evaluator must produce:
@@ -76,6 +76,18 @@ Then create or update `test-results.json` so every acceptance criterion starts w
 - Keep the plan lightweight. The point is to give the loop a spine, not to bury the builder in ceremony.
 
 ## Sprint-contract handshake
+
+Before invoking the contract-reviewer, check whether the operator set
+the re-simplify override `contract-reviewer`:
+
+```
+.claude/goal-state/re-simplify-overrides.json
+```
+
+If that JSON object contains a `contract-reviewer` key, **skip the
+handshake** and return the plan directly. The operator is benching
+whether the handshake is still load-bearing on the current model. If
+the key is absent (the default), the handshake is required.
 
 After writing the first draft, run the contract-reviewer subagent:
 

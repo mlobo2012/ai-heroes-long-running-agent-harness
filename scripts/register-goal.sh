@@ -230,6 +230,73 @@ INIT
   chmod +x "$WORKSPACE/init.sh"
 fi
 
+# AGENTS.md — industry-standard orientation file for the Codex
+# executor (and any other agent that follows the AGENTS.md convention).
+# Mirrors CLAUDE.md's "always start here / proof before passing /
+# keep state current" guidance so Codex sessions inherit the same
+# contract as Claude sessions.
+if [ ! -f "$WORKSPACE/AGENTS.md" ]; then
+  cat > "$WORKSPACE/AGENTS.md" <<'AGENTS'
+# AGENTS
+
+This workspace is governed by a long-running agent harness. The
+contract is the same whether you are Claude, Codex, or another agent
+implementation. Follow it.
+
+## Always start here
+
+1. Read `BUILD_PLAN.md` if it exists.
+2. Read `PROGRESS.md` if it exists.
+3. Read `QA_REPORT.md` if it exists.
+4. Read `NEXT_FINDINGS.md` if it exists (these are the open items the
+   previous evaluator round flagged).
+5. Read `STEER.md` if it exists (operator overrides).
+6. Run `git log --oneline -10`.
+
+If `BUILD_PLAN.md` does not exist, invoke the planner agent (or
+create the same structure manually) before implementation.
+
+## Proof before passing
+
+A criterion is only "passing" after you have:
+
+1. Run it against the real target.
+2. Produced evidence at the path declared in `BUILD_PLAN.md` under
+   the current round's namespace (`screenshots/round-N/...`,
+   `evidence/round-N/...`, `playwright-mcp/round-N/trace.zip`,
+   `computer-use/round-N/session.jsonl`).
+3. Opened the evidence file with your environment's Read tool.
+4. Confirmed the evidence shows what it should.
+
+The `verify-gate` hook denies writes to `test-results.json` until
+the relevant evidence has been opened. The `verify-gate-bash` hook
+catches `sed`/`jq`/`python` rewrites. Do not work around them.
+
+## Evaluator gate
+
+Before claiming the goal is complete, run the evaluator. The evaluator
+writes `QA_REPORT.md` starting with `PASS` or `NEEDS_WORK` on line 1.
+The heartbeat hook reads it. `PASS` alone is not completion — the
+contract file must also be green and (for frontend/desktop rubrics)
+an interaction trace must exist under the round-N directory.
+
+## Keep state current
+
+Update `PROGRESS.md` at the end of every coherent unit. The
+session-start hook surfaces it on the next session.
+
+## Operator controls
+
+- `AGENT_STOP` — kill switch. Next hook boundary stops cleanly.
+- `STEER.md` — operator steering. Next tool boundary injects the note.
+- `NEXT_FINDINGS.md` — evaluator's open items for the next round.
+
+If you're a Codex session: this file is your orientation. The harness
+ships the same primitives for you as for Claude — read them, honor
+them, and the loop closes the same way.
+AGENTS
+fi
+
 if [ ! -f "$WORKSPACE/BUILD_PLAN.md" ]; then
   python3 - "$WORKSPACE/BUILD_PLAN.md" "$GOAL" <<'PY'
 import sys

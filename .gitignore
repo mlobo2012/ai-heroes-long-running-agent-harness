@@ -15,6 +15,16 @@ __pycache__/
 AGENT_STOP
 STEER.md
 ESCALATION.md
+NEXT_FINDINGS.md
+
+# Runtime evidence directories — workspace-local per-round artifacts.
+# Committed only when a self-improvement round inside this very repo
+# wants to leave the trail in source control (e.g. evidence/round-1/
+# from the v0.5.0 release was committed as a record of the harness
+# grading itself).
+screenshots/
+playwright-mcp/
+computer-use/
 
 # Private working notes (live only in the internal mirror)
 INTERNAL.md
