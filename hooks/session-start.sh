@@ -83,6 +83,23 @@ if [ -f "$WORKDIR/QA_REPORT.md" ]; then
   emit ""
 fi
 
+# NEXT_FINDINGS.md carry-forward — written by the evaluator wrapper /
+# ralph-loop after a NEEDS_WORK round. Surface it at the top of the new
+# session so the builder doesn't redo the previous turn's work.
+if [ -s "$WORKDIR/NEXT_FINDINGS.md" ]; then
+  emit "### NEXT_FINDINGS.md — open items from the prior evaluator round"
+  emit ""
+  emit "These bullets are the top of the queue for this session. Address them"
+  emit "before opening new ground. The file is rewritten on every NEEDS_WORK"
+  emit "round, so don't mark anything done by 'fixing the file' — fix the"
+  emit "underlying issue and let the next evaluator round overwrite it."
+  emit ""
+  emit '```markdown'
+  head -120 "$WORKDIR/NEXT_FINDINGS.md"
+  emit '```'
+  emit ""
+fi
+
 if [ -f "$WORKDIR/PROGRESS.md" ]; then
   emit "### PROGRESS.md (last 40 lines)"
   emit ""

@@ -1,0 +1,31 @@
+=== re-simplify --help / --list ===
+Available re-simplify targets:
+  - contract-reviewer
+  - sprint-decomposition
+  - evaluator
+  - per-criterion-gate
+  - bash-gate
+  - session-start
+  - pre-compact
+  - playwright-trace
+
+=== set + status + restore round-trip ===
+re-simplify: set override target=playwright-trace reason='test on opus-4-7'
+re-simplify: relevant hook/script must check /tmp/tmp.jfpdv5ud1J/ws/.claude/goal-state/re-simplify-overrides.json on startup.
+re-simplify: run a bench round; compare to baseline; restore with --restore --target playwright-trace
+Current overrides:
+  - playwright-trace: {'reason': 'test on opus-4-7', 'set_at': 1779433814}
+re-simplify: cleared override for playwright-trace
+re-simplify: no overrides set in /tmp/tmp.jfpdv5ud1J/ws/.claude/goal-state/re-simplify-overrides.json
+
+=== heartbeat honors playwright-trace override (frontend rubric, no trace, PASS) ===
+  without override: exit=2 (expect 2 = block)
+re-simplify: set override target=playwright-trace reason='test'
+re-simplify: relevant hook/script must check /tmp/tmp.xTrpGGEIrF/ws/.claude/goal-state/re-simplify-overrides.json on startup.
+re-simplify: run a bench round; compare to baseline; restore with --restore --target playwright-trace
+  with override:    exit=0 (expect 0 = allow)
+
+=== unknown target rejected ===
+re-simplify: unknown target: not-real
+re-simplify: valid targets: contract-reviewer sprint-decomposition evaluator per-criterion-gate bash-gate session-start pre-compact playwright-trace
+exit=0

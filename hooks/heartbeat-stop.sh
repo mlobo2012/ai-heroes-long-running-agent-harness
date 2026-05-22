@@ -152,13 +152,32 @@ qa_has_pass() {
 
 # Interaction-evidence gate. The frontend and desktop rubrics demand that
 # the evaluator drove the live surface. Same enforcement floor for both:
-# at least one non-empty trace/session under the round-namespaced path.
+# at least one non-empty artifact under the round-namespaced path. The
+# strict-named contract (trace.zip / session.jsonl) is the preferred
+# shape and what the planner declares, but Playwright MCP server versions
+# vary in trace filename and computer-use servers sometimes emit
+# `actions.jsonl` or `events.log`. Accept any non-empty regular file under
+# `playwright-mcp/round-*/` or `computer-use/round-*/` so a contract
+# satisfied in spirit is not blocked by a filename mismatch. Strict path
+# remains documented in the rubric for evaluator discipline.
 has_interaction_evidence() {
   if command -v find >/dev/null 2>&1; then
+    # Strict-named preferred shapes first (cheaper for the common case).
     if find "$WORKDIR/playwright-mcp" -type f -name 'trace.zip' -size +0c 2>/dev/null | grep -q .; then
       return 0
     fi
     if find "$WORKDIR/computer-use" -type f -name 'session.jsonl' -size +0c 2>/dev/null | grep -q .; then
+      return 0
+    fi
+    # Fallback: any non-empty file under the round-namespaced dirs.
+    if find "$WORKDIR/playwright-mcp" -type d -name 'round-*' 2>/dev/null | while read -r d; do
+        find "$d" -type f -size +0c | head -1
+      done | grep -q .; then
+      return 0
+    fi
+    if find "$WORKDIR/computer-use" -type d -name 'round-*' 2>/dev/null | while read -r d; do
+        find "$d" -type f -size +0c | head -1
+      done | grep -q .; then
       return 0
     fi
   fi
@@ -262,19 +281,40 @@ if ! qa_has_pass; then
   block_continue "awaiting-evaluator-pass"
 fi
 
+# Re-simplify override: the operator may disable the interaction-
+# evidence gate to bench whether the gate is still load-bearing on the
+# current model. The override is read every beat so it can be toggled
+# without restarting the worker.
+trace_override_set=0
+if [ -f "$STATE_DIR/re-simplify-overrides.json" ] && command -v python3 >/dev/null 2>&1; then
+  if python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if isinstance(d, dict) and "playwright-trace" in d else 1)
+except Exception:
+    sys.exit(1)
+' "$STATE_DIR/re-simplify-overrides.json" 2>/dev/null; then
+    trace_override_set=1
+    log_status "re-simplify" "playwright-trace gate disabled by override"
+  fi
+fi
+
 # QA says PASS. Apply the interaction-evidence gate for rubrics that demand it.
 rubric_check=$(read_goal_field rubric)
-case "$rubric_check" in
-  frontend|desktop)
-    if ! has_interaction_evidence; then
-      # Roll the verdict back: the evaluator claimed PASS but did not drive
-      # the live surface. The agent must produce a Playwright trace under
-      # playwright-mcp/round-N/trace.zip OR a computer-use session log
-      # under computer-use/round-N/session.jsonl before PASS sticks.
-      block_continue "missing-interaction-evidence:${rubric_check}"
-    fi
-    ;;
-esac
+if [ "$trace_override_set" != "1" ]; then
+  case "$rubric_check" in
+    frontend|desktop)
+      if ! has_interaction_evidence; then
+        # Roll the verdict back: the evaluator claimed PASS but did not drive
+        # the live surface. The agent must produce a Playwright trace under
+        # playwright-mcp/round-N/trace.zip OR a computer-use session log
+        # under computer-use/round-N/session.jsonl before PASS sticks.
+        block_continue "missing-interaction-evidence:${rubric_check}"
+      fi
+      ;;
+  esac
+fi
 
 append_round "PASS"
 printf '0\n' > "$BLOCK_COUNT_FILE"

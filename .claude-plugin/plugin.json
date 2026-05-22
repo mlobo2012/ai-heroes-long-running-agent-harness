@@ -1,6 +1,6 @@
 {
   "name": "discord-long-running-harness",
-  "version": "0.4.0",
-  "description": "Long-running Claude Code harness with March-2026 parity plus measurable upgrades: planner/contract-reviewer/generator/evaluator loop, four-axis rubric library (frontend/api/library/data-pipeline/desktop), per-criterion evidence gate, Bash-bypass gate, Playwright MCP + native computer-use interaction-evidence enforcement, SessionStart/PreCompact context-anxiety hooks, unified round-budget with always-explicit escalation, evaluator calibration capture, per-round artifact namespacing + diff, bench rig, headless evaluator + contract-review entry points, worktree-isolated evaluator mode, model/rubric stamping on every round, and optional OpenClaw supervisor adapter.",
+  "version": "0.5.0",
+  "description": "Long-running Claude Code harness with March-2026 parity plus measurable upgrades: planner/contract-reviewer/generator/evaluator loop, four-axis rubric library (frontend/api/library/data-pipeline/desktop), per-criterion evidence gate with absolute-path matching, Bash-bypass gate, Playwright MCP wired into the evaluator tool list with non-canonical-filename fallback, native computer-use interaction-evidence enforcement, SessionStart/PreCompact context-anxiety hooks with NEXT_FINDINGS.md carry-forward, unified round-budget with always-explicit escalation, evaluator calibration capture, per-round artifact namespacing + diff, bench rig + bench-score delta tool, headless ralph-loop unattended driver, re-simplify-on-upgrade procedure, worktree-isolated evaluator mode, model/rubric stamping on every round, AGENTS.md seeded for Codex parity, Agent SDK equivalence doc, and optional OpenClaw supervisor adapter.",
   "author": "AI Heroes / Marco"
 }

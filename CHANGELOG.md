@@ -1,5 +1,127 @@
 # Changelog
 
+## 0.5.0 - 2026-05-22
+
+Closes the critical bugs that silently broke v0.4 primitives and adds
+the article's "Going further" patterns end-to-end: unattended loop
+(ralph-loop), NEXT_FINDINGS carry-forward, AGENTS.md for Codex parity,
+re-simplify on model upgrade, Agent SDK equivalence doc, and
+generalized framing.
+
+### Critical bugfixes
+
+- **`hooks/track-read.sh` evidence pattern expanded.** The v0.4 round-N
+  evidence shapes (`evidence/round-N/*.txt`, `playwright-mcp/round-N/
+  trace.zip`, `computer-use/round-N/session.jsonl`, plus `.zip`,
+  `.jsonl`, `.log`, `.txt`, `.json`, `.html`, image / pdf extensions)
+  are now logged when Read. Upstream pattern (`screenshots/`,
+  `-console.txt`, `-result.txt`, `.png`) preserved verbatim. The hook
+  also logs the absolute path alongside the literal path so the
+  per-criterion verify-gate matches either form.
+- **`agents/evaluator.md` now grants `mcp__playwright__*` tools.** The
+  evaluator was mandated to drive the live app via Playwright MCP but
+  the `tools:` frontmatter didn't include any of those tools. Headless
+  invocation (`claude --agent evaluator -p`) would silently fail to
+  drive the browser. Fixed: all 22 `mcp__playwright__browser_*` tools
+  now in the allowlist.
+- **`hooks/heartbeat-stop.sh` + `scripts/goal-watchdog.py` +
+  `scripts/run-evaluator.sh` accept non-canonical interaction-evidence
+  filenames.** Strict-named `trace.zip` / `session.jsonl` is still the
+  preferred contract (and what the planner declares), but the gate now
+  falls back to any non-empty regular file under
+  `playwright-mcp/round-*/` or `computer-use/round-*/` so server
+  versions that emit different filenames (`network.har`,
+  `actions.jsonl`, etc.) still satisfy the floor.
+
+### `scripts/ralph-loop.sh` — unattended build->evaluate->rebuild loop
+
+- Headless equivalent of the upstream wrapper from
+  `cwc-long-running-agents`. Honors the shared round-budget file the
+  heartbeat hook and watchdog also read.
+- Writes `NEXT_FINDINGS.md` after every NEEDS_WORK round so the next
+  builder turn opens with the previous evaluator's actionable bullets.
+- Exit-code contract: 0 PASS, 1 max-rounds (writes ESCALATION.md),
+  2 usage error, 3 no contract present, 4 AGENT_STOP on entry,
+  5 `claude` CLI missing.
+- `--isolated-evaluator` runs the evaluator inside `git worktree add`
+  so it cannot mutate the builder tree.
+- Logs each round to `.claude/goal-state/ralph-loop.jsonl` with
+  per-round build/eval stdout/stderr files.
+
+### `NEXT_FINDINGS.md` carry-forward
+
+- `scripts/run-evaluator.sh` writes `NEXT_FINDINGS.md` automatically
+  on NEEDS_WORK (extracting the "Specific findings" block from
+  `QA_REPORT.md`) and removes it on PASS.
+- `hooks/session-start.sh` surfaces `NEXT_FINDINGS.md` at the top of
+  the orientation block on every new session, after the QA verdict
+  and before PROGRESS.md.
+- `scripts/ralph-loop.sh` refreshes the file on every NEEDS_WORK
+  round it drives.
+
+### `scripts/re-simplify.sh` — re-simplify on model upgrade
+
+- The article's closing principle: "Every component encodes
+  assumptions about model limitations." `rounds.json` already stamps
+  the model used per round; this script makes "is X still load-bearing
+  on this model?" a measurable question by letting the operator
+  disable one piece, re-run the bench, and decide.
+- Eight named targets: `contract-reviewer`, `sprint-decomposition`,
+  `evaluator`, `per-criterion-gate`, `bash-gate`, `session-start`,
+  `pre-compact`, `playwright-trace`. Stored as JSON in
+  `.claude/goal-state/re-simplify-overrides.json`.
+- `playwright-trace` is the first end-to-end wired target: when set,
+  `hooks/heartbeat-stop.sh` skips the interaction-evidence gate so a
+  bench round can measure whether the gate is still load-bearing.
+- Round-trip: `--target X` to set, `--status` to inspect, `--restore`
+  to clear (one or all).
+
+### `scripts/register-goal.sh` now seeds `AGENTS.md`
+
+- Industry-standard orientation file for Codex sessions. Mirrors the
+  Claude `CLAUDE.md` contract: always start here, proof before
+  passing, evaluator gate, operator controls, NEXT_FINDINGS handling.
+- The same workspace can now host a Claude session and a Codex
+  session against the same contract.
+
+### `docs/agent-sdk-equivalent.md`
+
+- Maps every bash hook to its `PreToolUse`/`Stop`/`SessionStart`/
+  `PreCompact` callback equivalent in the Claude Agent SDK.
+- Includes Python sketches for the evidence gate and the heartbeat.
+- Calls out what does NOT translate (`.mcp.json`, `settings.json`
+  hook wiring, codex-spawn.sh) and what should stay out-of-process
+  (the watchdog).
+
+### Framing generalized
+
+- `CLAUDE.md` no longer leads with "Discord is the status channel".
+  Now leads with the loop diagram and explicitly notes the harness
+  is operator-channel-agnostic.
+- The `discord-long-running-harness` plugin slug is retained for
+  install-path stability; the harness itself is general.
+
+### `scripts/verify-install.sh`
+
+- Grew from 52 to 68 PASS checks covering: track-read round-N
+  patterns + negative space, evaluator Playwright MCP tool list,
+  non-canonical trace + session log fallbacks, ralph-loop dry-run +
+  no-contract refusal, session-start NEXT_FINDINGS surfacing,
+  register-goal AGENTS.md seeding, re-simplify list+status+restore
+  round-trip, re-simplify playwright-trace override end-to-end,
+  re-simplify unknown-target rejection, run-evaluator NEXT_FINDINGS
+  carry-forward, CLAUDE.md generalization, agent-sdk doc presence,
+  bench-score delta.
+
+### Self-improvement loop applied to the repo itself
+
+- This release was driven by registering a goal session against this
+  very workspace, writing a 12-criterion `BUILD_PLAN.md`, producing
+  evidence under `evidence/round-1/`, and clearing the heartbeat
+  gate. `rounds.json` records the verdict with rubric=`library`,
+  model=`claude-opus-4-7`, evidence_count=12. The harness now grades
+  itself.
+
 ## 0.4.0 - 2026-05-22
 
 Closes the remaining gaps the previous critique surfaced against the

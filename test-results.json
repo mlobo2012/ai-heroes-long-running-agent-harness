@@ -1,0 +1,76 @@
+{
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "track-read.sh recognizes every evidence shape declared in BUILD_PLAN.md round-N paths",
+      "evidence_paths": ["evidence/round-1/c1-track-read.txt"],
+      "passes": true
+    },
+    {
+      "id": "C2",
+      "description": "evaluator agent has mcp__playwright__* tools in frontmatter",
+      "evidence_paths": ["evidence/round-1/c2-evaluator-tools.txt"],
+      "passes": true
+    },
+    {
+      "id": "C3",
+      "description": "heartbeat + watchdog accept any non-empty file under playwright-mcp/round-N/ and computer-use/round-N/",
+      "evidence_paths": ["evidence/round-1/c3-trace-fallback.txt"],
+      "passes": true
+    },
+    {
+      "id": "C4",
+      "description": "scripts/ralph-loop.sh runs the full build->evaluate cycle headless with documented exit codes",
+      "evidence_paths": ["evidence/round-1/c4-ralph-loop-dry-run.txt"],
+      "passes": true
+    },
+    {
+      "id": "C5",
+      "description": "NEXT_FINDINGS.md carry-forward is wired through session-start, evaluator, and ralph-loop",
+      "evidence_paths": ["evidence/round-1/c5-next-findings.txt"],
+      "passes": true
+    },
+    {
+      "id": "C6",
+      "description": "register-goal seeds AGENTS.md alongside PROGRESS.md and init.sh",
+      "evidence_paths": ["evidence/round-1/c6-agents-md.txt"],
+      "passes": true
+    },
+    {
+      "id": "C7",
+      "description": "scripts/re-simplify.sh ships with a documented procedure",
+      "evidence_paths": ["evidence/round-1/c7-re-simplify.txt"],
+      "passes": true
+    },
+    {
+      "id": "C8",
+      "description": "CLAUDE.md leads with the loop, not with Discord",
+      "evidence_paths": ["evidence/round-1/c8-claude-md.txt"],
+      "passes": true
+    },
+    {
+      "id": "C9",
+      "description": "docs/agent-sdk-equivalent.md maps hooks to SDK callbacks",
+      "evidence_paths": ["evidence/round-1/c9-sdk-doc.txt"],
+      "passes": true
+    },
+    {
+      "id": "C10",
+      "description": "bench-score.py produces a delta between upstream baseline and candidate",
+      "evidence_paths": ["evidence/round-1/c10-bench-delta.txt"],
+      "passes": true
+    },
+    {
+      "id": "C11",
+      "description": "verify-install.sh covers every C1-C10 fix and stays green",
+      "evidence_paths": ["evidence/round-1/c11-verify-install.txt"],
+      "passes": true
+    },
+    {
+      "id": "C12",
+      "description": "round-N artifact namespacing is honored end-to-end",
+      "evidence_paths": ["evidence/round-1/c12-round-namespacing.txt"],
+      "passes": true
+    }
+  ]
+}

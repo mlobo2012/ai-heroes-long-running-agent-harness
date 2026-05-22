@@ -1,0 +1,42 @@
+=== session-start.sh surfaces NEXT_FINDINGS.md if present ===
+### NEXT_FINDINGS.md — open items from the prior evaluator round
+
+These bullets are the top of the queue for this session. Address them
+before opening new ground. The file is rewritten on every NEEDS_WORK
+round, so don't mark anything done by 'fixing the file' — fix the
+underlying issue and let the next evaluator round overwrite it.
+
+```markdown
+# NEXT_FINDINGS
+
+Specific findings:
+- C3: contrast on primary CTA is 3.2:1, must clear AA.
+- C7: dark mode flashes white on first paint.
+```
+
+### init.sh missing — create one that starts the dev server / runs the smoke test, then commit it.
+
+=== run-evaluator.sh writes NEXT_FINDINGS.md on NEEDS_WORK (simulated) ===
+--- generated NEXT_FINDINGS.md ---
+# NEXT_FINDINGS
+
+Captured from the most recent QA_REPORT.md after a NEEDS_WORK
+verdict.
+
+Specific findings:
+- F1: Fix the broken thing.
+- F2: Add an empty state.
+
+Regression risk: low.
+
+=== ralph-loop write_next_findings function exists and is wired ===
+write_next_findings() {
+  # Capture the most recent evaluator findings into NEXT_FINDINGS.md so
+  # the next build round opens with them.
+--
+      write_next_findings
+      ;;
+    NEEDS_WORK)
+--
+      write_next_findings
+      ;;

@@ -44,9 +44,258 @@ check_hooks_executable() {
 }
 
 check_new_scripts_executable() {
-  for s in run-contract-review.sh run-evaluator.sh calibrate-evaluator.sh diff-rounds.sh bench-harness.sh bench-score.py; do
+  for s in run-contract-review.sh run-evaluator.sh calibrate-evaluator.sh diff-rounds.sh bench-harness.sh bench-score.py ralph-loop.sh re-simplify.sh; do
     [ -x "$PLUGIN_DIR/scripts/$s" ] || { echo "$s is not executable" >&2; return 1; }
   done
+}
+
+check_track_read_recognizes_round_n_evidence() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  log="$tmp/reads"
+  : > "$log"
+  export VERIFY_READ_LOG="$log"
+  for path in evidence/round-1/x.txt playwright-mcp/round-1/trace.zip computer-use/round-1/session.jsonl evidence/round-1/x.log; do
+    mkdir -p "$tmp/$(dirname "$path")"
+    : > "$tmp/$path"
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"file_path":sys.argv[1]}}))' "$tmp/$path")
+    printf '%s' "$payload" | "$PLUGIN_DIR/hooks/track-read.sh"
+  done
+  unset VERIFY_READ_LOG
+  # All four must have been logged (plus their abs paths)
+  count=$(wc -l < "$log")
+  [ "$count" -ge 4 ] || { echo "track-read logged only $count entries; expected >=4" >&2; return 1; }
+  grep -q 'evidence/round-1/x.txt' "$log" || return 1
+  grep -q 'playwright-mcp/round-1/trace.zip' "$log" || return 1
+  grep -q 'computer-use/round-1/session.jsonl' "$log" || return 1
+  grep -q 'evidence/round-1/x.log' "$log"
+}
+
+check_track_read_skips_non_evidence() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  log="$tmp/reads"
+  : > "$log"
+  export VERIFY_READ_LOG="$log"
+  mkdir -p "$tmp/notes"
+  : > "$tmp/notes/random.foobar"
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"file_path":sys.argv[1]}}))' "$tmp/notes/random.foobar")
+  printf '%s' "$payload" | "$PLUGIN_DIR/hooks/track-read.sh"
+  unset VERIFY_READ_LOG
+  [ ! -s "$log" ]
+}
+
+check_evaluator_has_playwright_mcp_tools() {
+  tools_line=$(sed -n '/^---$/,/^---$/{/^tools:/p}' "$PLUGIN_DIR/agents/evaluator.md")
+  printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_navigate' || return 1
+  printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_take_screenshot' || return 1
+  printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_snapshot' || return 1
+  printf '%s' "$tools_line" | grep -q 'mcp__playwright__browser_console_messages' || return 1
+  # At least 15 distinct playwright tools listed
+  count=$(printf '%s' "$tools_line" | tr ',' '\n' | grep -c 'mcp__playwright__')
+  [ "$count" -ge 15 ]
+}
+
+check_heartbeat_accepts_non_canonical_playwright_trace() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace/.claude/goal-state" "$workspace/playwright-mcp/round-1"
+  printf '{"session_id":"fb","rubric":"frontend"}\n' > "$workspace/.claude/goal-state/goal-state.json"
+  printf '{"criteria":[{"id":"C1","passes":true}]}\n' > "$workspace/test-results.json"
+  printf 'PASS\n' > "$workspace/QA_REPORT.md"
+  # Non-canonical name: not trace.zip
+  echo "har data" > "$workspace/playwright-mcp/round-1/network.har"
+  set +e
+  output="$(cd "$workspace" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' 2>/dev/null)"
+  status=$?
+  set -e
+  [ "$status" -eq 0 ]
+}
+
+check_heartbeat_accepts_non_canonical_computer_use_log() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace/.claude/goal-state" "$workspace/computer-use/round-1"
+  printf '{"session_id":"fb","rubric":"desktop"}\n' > "$workspace/.claude/goal-state/goal-state.json"
+  printf '{"criteria":[{"id":"C1","passes":true}]}\n' > "$workspace/test-results.json"
+  printf 'PASS\n' > "$workspace/QA_REPORT.md"
+  # Non-canonical: not session.jsonl
+  echo '{"event":"keystroke"}' > "$workspace/computer-use/round-1/actions.jsonl"
+  set +e
+  output="$(cd "$workspace" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' 2>/dev/null)"
+  status=$?
+  set -e
+  [ "$status" -eq 0 ]
+}
+
+check_ralph_loop_dry_run() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace/.claude/goal-state"
+  printf '{"rubric":"library","round_budget":5}\n' > "$workspace/.claude/goal-state/goal-state.json"
+  printf '5\n' > "$workspace/.claude/goal-state/round-budget"
+  printf '{"criteria":[{"id":"C1","passes":false}]}\n' > "$workspace/test-results.json"
+  output="$("$PLUGIN_DIR/scripts/ralph-loop.sh" --workspace "$workspace" --dry-run 2>&1)"
+  printf '%s' "$output" | grep -q 'effective_budget=5' || return 1
+  printf '%s' "$output" | grep -q 'would invoke for each round'
+}
+
+check_ralph_loop_refuses_without_contract() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace"
+  set +e
+  "$PLUGIN_DIR/scripts/ralph-loop.sh" --workspace "$workspace" --dry-run >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -eq 3 ]
+}
+
+check_session_start_surfaces_next_findings() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace/.claude/goal-state"
+  printf '{"rubric":"library"}\n' > "$workspace/.claude/goal-state/goal-state.json"
+  cat > "$workspace/NEXT_FINDINGS.md" <<'EOF'
+# NEXT_FINDINGS
+
+Specific findings:
+- F1: contrast 3.2:1 on primary CTA.
+EOF
+  output="$(CLAUDE_PROJECT_DIR="$workspace" "$PLUGIN_DIR/hooks/session-start.sh" 2>/dev/null)"
+  printf '%s' "$output" | grep -q 'NEXT_FINDINGS.md' || return 1
+  printf '%s' "$output" | grep -q 'contrast 3.2:1'
+}
+
+check_register_goal_seeds_agents_md() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/workspace"
+  home="$tmp/home"
+  launcher="$tmp/launcher.sh"
+  mkdir -p "$workspace" "$home"
+  printf '#!/usr/bin/env bash\n' > "$launcher"; chmod +x "$launcher"
+  HOME="$home" "$PLUGIN_DIR/scripts/register-goal.sh" --agent verify --channel 0 --workspace "$workspace" --launcher "$launcher" "agents test" >/dev/null
+  [ -f "$workspace/AGENTS.md" ] || return 1
+  grep -q 'AGENTS' "$workspace/AGENTS.md" || return 1
+  grep -q 'NEXT_FINDINGS' "$workspace/AGENTS.md" || return 1
+  grep -q 'verify-gate' "$workspace/AGENTS.md"
+}
+
+check_re_simplify_list_and_status() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace"
+  out="$("$PLUGIN_DIR/scripts/re-simplify.sh" --list --workspace "$workspace")"
+  printf '%s' "$out" | grep -q 'playwright-trace' || return 1
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$workspace" --target playwright-trace --reason "test" >/dev/null
+  out=$("$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$workspace" --status)
+  printf '%s' "$out" | grep -q 'playwright-trace' || return 1
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$workspace" --restore >/dev/null
+  out=$("$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$workspace" --status)
+  printf '%s' "$out" | grep -q 'no overrides set'
+}
+
+check_re_simplify_disables_interaction_evidence() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace/.claude/goal-state"
+  printf '{"session_id":"rs","rubric":"frontend"}\n' > "$workspace/.claude/goal-state/goal-state.json"
+  printf '{"criteria":[{"id":"C1","passes":true}]}\n' > "$workspace/test-results.json"
+  printf 'PASS\n' > "$workspace/QA_REPORT.md"
+  # Without override: heartbeat must block.
+  set +e
+  cd "$workspace" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' >/dev/null 2>&1
+  status_without=$?
+  cd - >/dev/null
+  set -e
+  [ "$status_without" -eq 2 ] || return 1
+  # With override: heartbeat must allow.
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --workspace "$workspace" --target playwright-trace --reason "verify" >/dev/null
+  set +e
+  cd "$workspace" && "$PLUGIN_DIR/hooks/heartbeat-stop.sh" <<<'{}' >/dev/null 2>&1
+  status_with=$?
+  cd - >/dev/null
+  set -e
+  [ "$status_with" -eq 0 ]
+}
+
+check_re_simplify_unknown_target_rejected() {
+  set +e
+  "$PLUGIN_DIR/scripts/re-simplify.sh" --target not-real >/dev/null 2>&1
+  status=$?
+  set -e
+  [ "$status" -eq 2 ]
+}
+
+check_run_evaluator_writes_next_findings_on_needs_work() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  workspace="$tmp/ws"
+  mkdir -p "$workspace"
+  # Synthesise the post-eval block of run-evaluator.sh (no real `claude` invocation).
+  cat > "$workspace/QA_REPORT.md" <<'EOF'
+NEEDS_WORK
+
+Evidence reviewed: e1, e2
+
+Specific findings:
+- F1: do x
+- F2: do y
+
+Regression risk: none.
+EOF
+  python3 - "$workspace/QA_REPORT.md" "$workspace/NEXT_FINDINGS.md" <<'PY'
+import sys
+from pathlib import Path
+qa, nf = sys.argv[1:3]
+text = Path(qa).read_text()
+lo = text.find("Specific findings")
+body = text[lo:] if lo != -1 else text
+Path(nf).write_text("# NEXT_FINDINGS\n\n" + body)
+PY
+  [ -f "$workspace/NEXT_FINDINGS.md" ] || return 1
+  grep -q 'do x' "$workspace/NEXT_FINDINGS.md" && grep -q 'do y' "$workspace/NEXT_FINDINGS.md"
+}
+
+check_claude_md_no_discord_lead() {
+  # First 5 non-comment non-blank lines must not include "Discord"
+  head=$(grep -v '^<!--' "$PLUGIN_DIR/CLAUDE.md" | grep -v '^$' | head -5)
+  if printf '%s' "$head" | grep -qi 'discord'; then
+    return 1
+  fi
+  grep -q 'Long-Running Agent Harness' "$PLUGIN_DIR/CLAUDE.md" || return 1
+  grep -q 'ralph-loop' "$PLUGIN_DIR/CLAUDE.md" || return 1
+  grep -q 'NEXT_FINDINGS' "$PLUGIN_DIR/CLAUDE.md" || return 1
+  grep -q 're-simplify' "$PLUGIN_DIR/CLAUDE.md"
+}
+
+check_agent_sdk_doc_present() {
+  [ -f "$PLUGIN_DIR/docs/agent-sdk-equivalent.md" ] || return 1
+  for needle in PreToolUse Stop SessionStart PreCompact BlockToolCall BlockStop ralph-loop fresh-context goal-watchdog; do
+    grep -q "$needle" "$PLUGIN_DIR/docs/agent-sdk-equivalent.md" || { echo "agent-sdk doc missing: $needle" >&2; return 1; }
+  done
+}
+
+check_bench_score_shows_delta() {
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  cat > "$tmp/a.json" <<'JSON'
+{"pilot":"x","completed":true,"wall_clock_seconds":720,"rounds_to_pass":5,"total_io_bytes_estimate":480000,"false_pass":true}
+JSON
+  cat > "$tmp/b.json" <<'JSON'
+{"pilot":"x","completed":true,"wall_clock_seconds":290,"rounds_to_pass":2,"total_io_bytes_estimate":195000,"false_pass":false}
+JSON
+  output="$("$PLUGIN_DIR/scripts/bench-score.py" "$tmp/a.json" "$tmp/b.json" 2>&1)"
+  printf '%s' "$output" | grep -q -- '-59.7%' || return 1
+  printf '%s' "$output" | grep -q -- '-60.0%'
 }
 
 check_mcp_json_valid() {
@@ -751,5 +1000,21 @@ check "bench-score compares two score files" check_bench_score_handles_inputs
 check "session-start surfaces calibration + pinned rubric" check_session_start_surfaces_calibration
 check "rounds.json stamps model, rubric, and codex_model" check_rounds_json_stamps_model_and_rubric
 check "watchdog honors workspace round-budget file" check_watchdog_respects_round_budget_file
+check "track-read recognizes round-N evidence shapes" check_track_read_recognizes_round_n_evidence
+check "track-read skips non-evidence paths" check_track_read_skips_non_evidence
+check "evaluator has Playwright MCP tools wired" check_evaluator_has_playwright_mcp_tools
+check "heartbeat accepts non-canonical playwright trace filename" check_heartbeat_accepts_non_canonical_playwright_trace
+check "heartbeat accepts non-canonical computer-use log filename" check_heartbeat_accepts_non_canonical_computer_use_log
+check "ralph-loop dry-run reports invocation" check_ralph_loop_dry_run
+check "ralph-loop refuses without test-results.json contract" check_ralph_loop_refuses_without_contract
+check "session-start surfaces NEXT_FINDINGS.md when present" check_session_start_surfaces_next_findings
+check "register-goal seeds AGENTS.md for Codex parity" check_register_goal_seeds_agents_md
+check "re-simplify list + status + restore round-trip" check_re_simplify_list_and_status
+check "re-simplify playwright-trace override disables interaction gate" check_re_simplify_disables_interaction_evidence
+check "re-simplify unknown target rejected" check_re_simplify_unknown_target_rejected
+check "run-evaluator writes NEXT_FINDINGS.md on NEEDS_WORK" check_run_evaluator_writes_next_findings_on_needs_work
+check "CLAUDE.md leads with the harness, not with Discord" check_claude_md_no_discord_lead
+check "docs/agent-sdk-equivalent.md present and complete" check_agent_sdk_doc_present
+check "bench-score reports a numeric delta" check_bench_score_shows_delta
 
 exit "$failures"
