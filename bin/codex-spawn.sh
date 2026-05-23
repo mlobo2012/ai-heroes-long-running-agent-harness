@@ -87,7 +87,7 @@ codex exec \
   --dangerously-bypass-approvals-and-sandbox \
   -C "$WORKDIR" \
   --skip-git-repo-check \
-  "$PROMPT" &
+  "$PROMPT" </dev/null &
 codex_pid="$!"
 
 STATE_DIR="$WORKDIR/.claude/goal-state"
