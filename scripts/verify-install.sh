@@ -225,6 +225,14 @@ check_router_workers_get_plugin_dir() {
   grep -Eq -- 'DISCORD_WORKER_PLUGIN_DIRS=[^[:space:]]*discord-long-running-harness' "$launcher"
 }
 
+check_launcher_audit_passes() {
+  audit="$PLUGIN_DIR/scripts/audit-discord-launchers.sh"
+  [ -x "$audit" ] || return 1
+  # Release gate: every Discord agent launcher must load the harness plugin
+  # (so Stop/SubagentStop hooks fire). Audit exits non-zero if any launcher fails.
+  AUDIT_LAUNCHER_DIR="${AUDIT_LAUNCHER_DIR:-$HOME/.claude/channels/discord}" bash "$audit" >/dev/null 2>&1
+}
+
 check_supervisor_runner_executable() {
   [ -x "$PLUGIN_DIR/scripts/supervisor-runner.sh" ]
 }
@@ -404,6 +412,7 @@ if [ "$SCOPE" = "setup" ] || [ "$SCOPE" = "all" ]; then
   check "enable-for-launcher dry-run does not edit" check_enable_dry_run
   check "launchers do not use obsolete --plugin flag" check_no_legacy_launcher_flags
   check "router workers inherit harness plugin dir" check_router_workers_get_plugin_dir
+  check "all discord launchers pass plugin-dir audit" check_launcher_audit_passes
 fi
 
 exit "$failures"
