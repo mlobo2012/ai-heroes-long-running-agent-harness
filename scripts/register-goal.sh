@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # AI Heroes / Marco - discord-long-running-harness
+#
+# Set REGISTER_GOAL_ALLOW_CWD_MISMATCH=1 to intentionally register a workspace
+# from a different launching cwd without writing a mismatch warning marker.
 
 usage() {
   cat <<'USAGE'
@@ -77,6 +80,69 @@ if [ ! -f "$LAUNCHER" ]; then
   exit 4
 fi
 
+resolve_physical_dir() {
+  cd "$1" 2>/dev/null && pwd -P
+}
+
+WORKSPACE_RESOLVED="$(resolve_physical_dir "$WORKSPACE")"
+SESSION_CWD_SOURCE="${REGISTER_GOAL_CWD:-$PWD}"
+if ! SESSION_CWD_RESOLVED="$(resolve_physical_dir "$SESSION_CWD_SOURCE")"; then
+  SESSION_CWD_RESOLVED="$(pwd -P)"
+fi
+WORKSPACE="$WORKSPACE_RESOLVED"
+WORKSPACE_MISMATCH=0
+
+record_workspace_mismatch() {
+  cat >&2 <<EOF
+========================================
+register-goal: WARNING: --workspace does not match launching cwd
+  workspace:   $WORKSPACE_RESOLVED
+  session cwd: $SESSION_CWD_RESOLVED
+  consequence: inner-pulse hooks resolve goal-state from the session cwd; a mismatched workspace will not be driven
+========================================
+EOF
+
+  recorded_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  write_mismatch_marker() {
+    mismatch_dir="$1"
+    mismatch_file="$mismatch_dir/workspace-mismatch.json"
+    if mkdir -p "$mismatch_dir"; then
+      if ! python3 - "$mismatch_file" "$WORKSPACE_RESOLVED" "$SESSION_CWD_RESOLVED" "$recorded_at" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = {
+    "workspace": sys.argv[2],
+    "session_cwd": sys.argv[3],
+    "recorded_at": sys.argv[4],
+    "source": "register-goal",
+}
+tmp = path.with_suffix(path.suffix + ".tmp")
+tmp.write_text(json.dumps(data, indent=2) + "\n")
+tmp.replace(path)
+PY
+      then
+        echo "register-goal: WARNING: could not write workspace mismatch marker: $mismatch_file" >&2
+      fi
+    else
+      echo "register-goal: WARNING: could not create workspace mismatch marker directory: $mismatch_dir" >&2
+    fi
+  }
+
+  write_mismatch_marker "$WORKSPACE/.claude/goal-state"
+  if [ "$SESSION_CWD_RESOLVED" != "$WORKSPACE" ]; then
+    write_mismatch_marker "$SESSION_CWD_RESOLVED/.claude/goal-state"
+  fi
+}
+
+if [ "${REGISTER_GOAL_ALLOW_CWD_MISMATCH:-0}" != "1" ] && [ "$WORKSPACE_RESOLVED" != "$SESSION_CWD_RESOLVED" ]; then
+  record_workspace_mismatch
+  WORKSPACE_MISMATCH=1
+fi
+
 if command -v uuidgen >/dev/null 2>&1; then
   session_id="$(uuidgen | tr 'A-Z' 'a-z')"
 else
@@ -94,12 +160,12 @@ mkdir -p "$ACTIVE_DIR"
 backup_ts="$(date +%s)"
 ACTIVE_BACKUP="${ACTIVE_FILE}.bak.${backup_ts}.register-goal"
 
-line="$(python3 - "$session_id" "$AGENT" "$CHANNEL" "$GOAL" "$started_at" "$WORKSPACE" "$LAUNCHER" <<'PY'
+line="$(python3 - "$session_id" "$AGENT" "$CHANNEL" "$GOAL" "$started_at" "$WORKSPACE" "$LAUNCHER" "$SESSION_CWD_RESOLVED" "$WORKSPACE_MISMATCH" <<'PY'
 import json
 import sys
 
-session_id, agent, channel, goal, started_at, workspace, launcher = sys.argv[1:8]
-print(json.dumps({
+session_id, agent, channel, goal, started_at, workspace, launcher, session_cwd, workspace_mismatch = sys.argv[1:10]
+data = {
     "session_id": session_id,
     "agent": agent,
     "channel": channel,
@@ -107,7 +173,11 @@ print(json.dumps({
     "started_at": started_at,
     "workspace": workspace,
     "launcher": launcher,
-}, separators=(",", ":")))
+}
+if workspace_mismatch == "1":
+    data["registered_from_cwd"] = session_cwd
+    data["workspace_mismatch"] = True
+print(json.dumps(data, separators=(",", ":")))
 PY
 )"
 
@@ -202,7 +272,7 @@ GOAL_STATE_DIR="$WORKSPACE/.claude/goal-state"
 GOAL_STATE_FILE="$GOAL_STATE_DIR/goal-state.json"
 GOAL_STATE_BACKUP="${GOAL_STATE_FILE}.bak.${backup_ts}.register-goal"
 mkdir -p "$GOAL_STATE_DIR"
-GOAL_STATE_BACKUP="$GOAL_STATE_BACKUP" python3 - "$GOAL_STATE_FILE" "$session_id" "$GOAL" "$started_at" <<'PY'
+GOAL_STATE_BACKUP="$GOAL_STATE_BACKUP" python3 - "$GOAL_STATE_FILE" "$session_id" "$GOAL" "$started_at" "$WORKSPACE" "$SESSION_CWD_RESOLVED" "$WORKSPACE_MISMATCH" <<'PY'
 import json
 import os
 import sys
@@ -219,7 +289,15 @@ data = {
     "goal": sys.argv[3],
     "started_at": sys.argv[4],
     "status": "active",
+    "workspace": sys.argv[5],
 }
+if sys.argv[7] == "1":
+    data["registered_from_cwd"] = sys.argv[6]
+    data["workspace_mismatch"] = {
+        "workspace": sys.argv[5],
+        "session_cwd": sys.argv[6],
+        "source": "register-goal",
+    }
 tmp = path.with_suffix(path.suffix + ".tmp")
 tmp.write_text(json.dumps(data, indent=2) + "\n")
 tmp.replace(path)

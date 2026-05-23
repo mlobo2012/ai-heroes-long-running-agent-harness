@@ -63,9 +63,126 @@ PY
   set -e
 }
 
+warn_workspace_cwd_mismatch() {
+  set +e
+  active_file="$HOME/.claude/goal-sessions/active.jsonl"
+  marker_file="$STATE_DIR/workspace-mismatch.json"
+  goal_state_file="$STATE_DIR/goal-state.json"
+  if ! command -v python3 >/dev/null 2>&1; then
+    set -e
+    return 0
+  fi
+  SESSION_START_INPUT="$input" ACTIVE_FILE="$active_file" SESSION_WORKDIR="$WORKDIR" MARKER_FILE="$marker_file" GOAL_STATE_FILE="$goal_state_file" python3 - <<'PY' || true
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def physical(path):
+    return os.path.realpath(os.path.abspath(os.path.expanduser(str(path))))
+
+
+def read_json(path):
+    try:
+        p = Path(path)
+        if not p.is_file():
+            return None
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+try:
+    hook_input = json.loads(os.environ.get("SESSION_START_INPUT", "") or "{}")
+except json.JSONDecodeError:
+    hook_input = {}
+
+session_id = str(hook_input.get("session_id") or "").strip()
+
+workdir = physical(os.environ.get("SESSION_WORKDIR", os.getcwd()))
+marker_path = Path(os.environ.get("MARKER_FILE", ""))
+goal_state_path = Path(os.environ.get("GOAL_STATE_FILE", ""))
+warnings = []
+
+
+def add_warning(source, workspace, extra=None):
+    if not workspace:
+        return
+    workspace = physical(workspace)
+    if workspace == workdir:
+        return
+    warning = {
+        "source": source,
+        "workspace": workspace,
+        "session_cwd": workdir,
+    }
+    if extra:
+        warning.update(extra)
+    if warning not in warnings:
+        warnings.append(warning)
+
+
+marker = read_json(marker_path)
+if isinstance(marker, dict):
+    add_warning(marker.get("source") or "workspace-mismatch marker", marker.get("workspace"), {"marker": str(marker_path)})
+
+goal_state = read_json(goal_state_path)
+if isinstance(goal_state, dict):
+    add_warning("goal-state", goal_state.get("workspace"), {"goal_state": str(goal_state_path)})
+
+active_file = os.environ.get("ACTIVE_FILE", "")
+if session_id and active_file:
+    try:
+        lines = open(active_file, encoding="utf-8").read().splitlines()
+    except OSError:
+        lines = []
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            record = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if str(record.get("session_id") or "").strip() != session_id:
+            continue
+        add_warning("active goal ledger", record.get("workspace"), {"session_id": session_id})
+        break
+
+if warnings:
+    marker_data = {
+        "workspace": warnings[0]["workspace"],
+        "session_cwd": workdir,
+        "source": "session-start",
+        "detected_from": warnings[0]["source"],
+    }
+    try:
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = marker_path.with_suffix(marker_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(marker_data, indent=2) + "\n", encoding="utf-8")
+        tmp.replace(marker_path)
+    except Exception:
+        pass
+    print("========================================", file=sys.stderr)
+    print("session-start: WARNING: registered goal workspace does not match current session cwd", file=sys.stderr)
+    for warning in warnings:
+        if warning.get("session_id"):
+            print(f"  session id: {warning['session_id']}", file=sys.stderr)
+        print(f"  source:               {warning['source']}", file=sys.stderr)
+        print(f"  registered workspace: {warning['workspace']}", file=sys.stderr)
+        print(f"  current cwd:          {warning['session_cwd']}", file=sys.stderr)
+    print("  consequence: inner-pulse hooks resolve goal-state from the session cwd; this registered goal will not be driven", file=sys.stderr)
+    print(f"  marker: {marker_path}", file=sys.stderr)
+    print("========================================", file=sys.stderr)
+PY
+  set -e
+}
+
 mkdir -p "$STATE_DIR" || fail_bootstrap "could not create goal-state directory: $STATE_DIR"
 # This beacon's presence proves the plugin loaded for the session; its absence for a registered goal proves it did not (the silent-load detector).
 write_harness_loaded_beacon || true
+warn_workspace_cwd_mismatch || true
 require_readable_nonempty_dir "$STATE_DIR" ".claude/goal-state"
 
 if [ ! -f "$PROGRESS" ]; then
