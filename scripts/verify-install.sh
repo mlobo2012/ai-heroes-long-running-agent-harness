@@ -7,12 +7,12 @@ set -euo pipefail
 #   --scope core    Universal harness checks only. Should pass on any machine
 #                   with the plugin properly installed and the codex env file
 #                   pinned, even without OpenClaw or Marco-specific Discord
-#                   launchers. 28 checks.
+#                   launchers. 29 checks.
 #   --scope setup   The Marco-specific outer-pulse + Discord-router launcher
 #                   checks. Verifies the OpenClaw goal-supervisor is wired and
 #                   that no launcher uses the obsolete --plugin flag. 6 checks.
 #                   FAILS on a community install — that's expected.
-#   --scope all     core + setup. Default. 34 checks total.
+#   --scope all     core + setup. Default. 35 checks total.
 #
 # A community user reading the README should expect `--scope core` to exit 0
 # after they follow the install + codex-pin steps. `--scope all` is for
@@ -127,6 +127,11 @@ check_hooks_executable() {
       return 1
     }
   done
+}
+
+check_preflight_script_executable() {
+  [ -x "$PLUGIN_DIR/bin/preflight-harness.sh" ] || return 1
+  bash -n "$PLUGIN_DIR/bin/preflight-harness.sh"
 }
 
 check_codex_dry_run() {
@@ -364,6 +369,7 @@ if [ "$SCOPE" = "core" ] || [ "$SCOPE" = "all" ]; then
   check "Claude plugin manifest validates" check_plugin_manifest_schema
   check "plugin hooks config is discoverable" check_plugin_hooks_config
   check "hook scripts executable" check_hooks_executable
+  check "preflight harness script executable" check_preflight_script_executable
   check "codex-spawn dry-run uses gpt-5.5 xhigh" check_codex_dry_run
   check "CODEX_MODEL env file valid" check_codex_env
   check "forbid gpt-5.4" check_forbidden_model gpt-5.4

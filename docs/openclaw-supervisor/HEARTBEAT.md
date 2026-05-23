@@ -4,7 +4,9 @@ On every heartbeat, run these checks silently. Only speak up if something needs 
 
 ## 1. Active Goal Sessions
 
-- Read `~/.claude/goal-sessions/active.jsonl`.
+- Resolve the active ledger from `GOAL_SESSIONS_LEDGER`, defaulting it to the absolute path of the operator's real `.claude/goal-sessions/active.jsonl`.
+- Use the absolute path, never `~`/`$HOME` — a sandboxed supervisor agent's home resolves to its sandbox home, so a tilde path silently reads an empty location and the supervisor wrongly reports zero active goals. This exact bug made the supervisor blind in production.
+- Read the resolved active ledger path.
 - If the file is missing or empty, write `state/last-tick.json` with zero counts and reply exactly: `HEARTBEAT_OK`.
 - Parse each non-empty line as one active session:
   - `session_id`
@@ -44,7 +46,7 @@ Do not also rely on assistant final text for this alert.
 On completion:
 
 - Send one explicit Discord `message` tool call to the session's `channel` with the duration from `started_at` to now.
-- Remove that session line from `~/.claude/goal-sessions/active.jsonl` atomically by reading all lines, filtering out the matching `session_id`, writing a temp file in the same directory, then moving it over the original.
+- Remove that session line from the resolved active ledger path atomically by reading all lines, filtering out the matching `session_id`, writing a temp file in the same directory, then moving it over the original.
 
 ## 5. Debug State
 
@@ -64,7 +66,9 @@ Reply exactly: HEARTBEAT_OK
 protocol. It accepts synthetic-state overrides for the active ledger, stall
 threshold, recovery log, completion log, and optional Discord webhook, so CI
 and community installers can validate the outer-pulse behavior without a live
-OpenClaw Codex agent or the live `~/.claude/goal-sessions/active.jsonl`.
+OpenClaw Codex agent or the live operator goal-session ledger. Public
+supervisors should expose `GOAL_SESSIONS_LEDGER` and default it to the absolute
+path of the operator's real `.claude/goal-sessions/active.jsonl`.
 
 The fixture is covered by:
 

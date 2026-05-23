@@ -17,6 +17,7 @@ WORKDIR="${PWD}"
 PROGRESS="$WORKDIR/PROGRESS.md"
 RESULTS="$WORKDIR/test-results.json"
 STATE_DIR="$WORKDIR/.claude/goal-state"
+input="$(cat 2>/dev/null || true)"
 
 fail_bootstrap() {
   echo "session-start: $1" >&2
@@ -39,7 +40,32 @@ require_readable_nonempty_dir() {
   [ -s "$dir" ] || fail_bootstrap "$label directory is empty: $dir"
 }
 
+write_harness_loaded_beacon() {
+  set +e
+  session_id=""
+  if command -v jq >/dev/null 2>&1; then
+    session_id="$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null || true)"
+  elif command -v python3 >/dev/null 2>&1; then
+    session_id="$(INPUT_JSON="$input" python3 - <<'PY' 2>/dev/null || true
+import json
+import os
+
+try:
+    data = json.loads(os.environ.get("INPUT_JSON", "") or "{}")
+except json.JSONDecodeError:
+    data = {}
+print(data.get("session_id") or "")
+PY
+)"
+  fi
+  session_id="$(printf '%s' "$session_id" | tr -d '\r\n')"
+  printf '%s %s\n' "$(date +%s)" "$session_id" > "$STATE_DIR/harness-loaded" 2>/dev/null || true
+  set -e
+}
+
 mkdir -p "$STATE_DIR" || fail_bootstrap "could not create goal-state directory: $STATE_DIR"
+# This beacon's presence proves the plugin loaded for the session; its absence for a registered goal proves it did not (the silent-load detector).
+write_harness_loaded_beacon || true
 require_readable_nonempty_dir "$STATE_DIR" ".claude/goal-state"
 
 if [ ! -f "$PROGRESS" ]; then
