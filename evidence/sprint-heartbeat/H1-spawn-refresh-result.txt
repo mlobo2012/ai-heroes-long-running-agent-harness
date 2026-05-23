@@ -1,0 +1,24 @@
+PASS exit=0 initial last-beat mtime=1779472420 target_pid=74626
+LIVE spawn-active.json exit=0
+{"pid":74626,"started_at":"2026-05-22T17:53:40Z","last_refreshed":"2026-05-22T17:53:40Z","command":"codex"}
+PASS exit=0 mtime advance 1: 1779472420 -> 1779472450
+PASS exit=0 last_refreshed advance 1: 2026-05-22T17:53:40Z -> 2026-05-22T17:54:10Z
+PASS exit=0 mtime advance 2: 1779472450 -> 1779472480
+PASS exit=0 last_refreshed advance 2: 2026-05-22T17:54:10Z -> 2026-05-22T17:54:40Z
+PASS exit=0 codex-spawn exit propagated
+AFTER exit=0 spawn-active ls:
+ls: /var/folders/89/yfgyv9vs6ds4shq035nfdjc40000gn/T//heartbeat-spawn-refresh.lF0K9c/case-0/workspace/.claude/goal-state/spawn-active.json: No such file or directory
+PASS exit=0 spawn-active removed
+PASS exit=7 initial last-beat mtime=1779472510 target_pid=75428
+LIVE spawn-active.json exit=7
+{"pid":75428,"started_at":"2026-05-22T17:55:10Z","last_refreshed":"2026-05-22T17:55:10Z","command":"codex"}
+PASS exit=7 mtime advance 1: 1779472510 -> 1779472540
+PASS exit=7 last_refreshed advance 1: 2026-05-22T17:55:10Z -> 2026-05-22T17:55:40Z
+PASS exit=7 mtime advance 2: 1779472540 -> 1779472570
+PASS exit=7 last_refreshed advance 2: 2026-05-22T17:55:40Z -> 2026-05-22T17:56:10Z
+PASS exit=7 codex-spawn exit propagated
+AFTER exit=7 spawn-active ls:
+ls: /var/folders/89/yfgyv9vs6ds4shq035nfdjc40000gn/T//heartbeat-spawn-refresh.lF0K9c/case-7/workspace/.claude/goal-state/spawn-active.json: No such file or directory
+PASS exit=7 spawn-active removed
+PASS - spawn heartbeat refreshes last-beat and preserves codex exit codes
+EXIT_CODE=0

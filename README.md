@@ -26,6 +26,11 @@ The fix is a second timer at a different cadence. One drives the loop. One watch
 
 The outer pulse only intervenes when state goes stale. It is the safety net, not the engine.
 
+Heartbeat state has two explicit sources. `stop-hook` means a `Stop` or
+`SubagentStop` hook reached `hooks/heartbeat-stop.sh` at a turn boundary.
+`spawn-active` means `bin/codex-spawn.sh` has a live Codex child process and
+is refreshing `.claude/goal-state/last-beat` before the parent turn ends.
+
 ## How it works (first principles)
 
 ```
@@ -227,6 +232,15 @@ exec claude \
   --plugin-dir "$HOME/.claude/plugins/discord-long-running-harness" \
   # ...your other flags
 ```
+
+### Discord launcher audit
+
+Run `scripts/audit-discord-launchers.sh` whenever a Discord agent launcher is
+added, or any time `Stop`/`SubagentStop` hooks appear not to be firing. It
+checks executable `~/.claude/channels/discord/start-*.sh` files for the harness
+plugin wiring. The canonical fix is to pass
+`--plugin-dir /Users/marco/.claude/plugins/discord-long-running-harness` to
+the `claude` invocation.
 
 ### Pin the Codex model
 
@@ -434,12 +448,14 @@ bin/
   codex-spawn.sh                         # Reads pinned CODEX_MODEL, invokes codex exec
   enable-for-launcher.sh                 # Safe rollout helper (dry-run by default, --plugin-dir aware)
 scripts/
+  spawn-heartbeat.sh                     # Refreshes last-beat + spawn-active.json during Codex spawns
   init-workspace.sh                      # Seeds PROGRESS.md, test-results.json, STEER.md, goal-state, and initial commit
   register-goal.sh                       # Registers an active goal session
   blocker-record.sh                      # Appends open production blockers to .claude/goal-state/blockers.jsonl
   blocker-update.sh                      # Appends latest-wins blocker status updates
   benchmark-collect.sh                   # Emits JSON for docs/benchmarks.md
   sync-to-install.sh                     # Mirrors package files into the installed plugin
+  audit-discord-launchers.sh             # Audits Discord launchers for --plugin-dir wiring
   audit-readme.sh                        # Checks capability map and local README links
   verify-install.sh                      # 28 core checks + 6 setup checks; --scope core|setup|all
 docs/

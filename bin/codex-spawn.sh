@@ -2,6 +2,10 @@
 set -euo pipefail
 # AI Heroes / Marco - discord-long-running-harness
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+HEARTBEAT_HELPER="$PLUGIN_DIR/scripts/spawn-heartbeat.sh"
+
 DRY_RUN=0
 if [ "${1:-}" = "--dry-run" ]; then
   DRY_RUN=1
@@ -48,10 +52,62 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-exec codex exec \
+codex_pid=""
+heartbeat_pid=""
+
+cleanup_heartbeat() {
+  set +e
+  if [ -n "$heartbeat_pid" ] && kill -0 "$heartbeat_pid" 2>/dev/null; then
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+  fi
+}
+
+forward_signal() {
+  signal="$1"
+  trap - EXIT INT TERM
+  set +e
+  if [ -n "$codex_pid" ] && kill -0 "$codex_pid" 2>/dev/null; then
+    kill "-$signal" "$codex_pid" 2>/dev/null || true
+  fi
+  cleanup_heartbeat
+  if [ "$signal" = "INT" ]; then
+    exit 130
+  fi
+  exit 143
+}
+
+trap cleanup_heartbeat EXIT
+trap 'forward_signal INT' INT
+trap 'forward_signal TERM' TERM
+
+codex exec \
   -m "$CODEX_MODEL" \
   -c model_reasoning_effort=xhigh \
   --dangerously-bypass-approvals-and-sandbox \
   -C "$WORKDIR" \
   --skip-git-repo-check \
-  "$PROMPT"
+  "$PROMPT" &
+codex_pid="$!"
+
+STATE_DIR="$WORKDIR/.claude/goal-state"
+if [ -d "$STATE_DIR" ] && [ -x "$HEARTBEAT_HELPER" ]; then
+  heartbeat_args=("$codex_pid" "$STATE_DIR" --command codex)
+  if [ -n "${CODEX_SPAWN_HEARTBEAT_INTERVAL:-}" ]; then
+    heartbeat_args+=(--interval "$CODEX_SPAWN_HEARTBEAT_INTERVAL")
+  fi
+  if [ -n "${CODEX_SPAWN_HEARTBEAT_MAX_RUNTIME:-}" ]; then
+    heartbeat_args+=(--max-runtime "$CODEX_SPAWN_HEARTBEAT_MAX_RUNTIME")
+  fi
+  "$HEARTBEAT_HELPER" "${heartbeat_args[@]}" &
+  heartbeat_pid="$!"
+fi
+
+set +e
+wait "$codex_pid"
+codex_status="$?"
+set -e
+
+cleanup_heartbeat
+trap - EXIT INT TERM
+exit "$codex_status"

@@ -55,7 +55,7 @@ PY
 
 write_state_snapshot() {
   if command -v jq >/dev/null 2>&1; then
-    if printf '%s' "$input" | jq -c '{session_id, hook_event_name, background_tasks, session_crons}' > "$STATE_DIR/last-beat-state.json" 2>/dev/null; then
+    if printf '%s' "$input" | jq -c '{source:"stop-hook", session_id, hook_event_name, background_tasks, session_crons}' > "$STATE_DIR/last-beat-state.json" 2>/dev/null; then
       return 0
     fi
   fi
@@ -72,6 +72,7 @@ try:
 except json.JSONDecodeError:
     data = {}
 state = {
+    "source": "stop-hook",
     "session_id": data.get("session_id"),
     "hook_event_name": data.get("hook_event_name"),
     "background_tasks": data.get("background_tasks"),
@@ -81,7 +82,7 @@ Path(sys.argv[1]).write_text(json.dumps(state, separators=(",", ":")) + "\n")
 PY
     return 0
   fi
-  printf '{"session_id":null,"hook_event_name":null,"background_tasks":null,"session_crons":null}\n' > "$STATE_DIR/last-beat-state.json"
+  printf '{"source":"stop-hook","session_id":null,"hook_event_name":null,"background_tasks":null,"session_crons":null}\n' > "$STATE_DIR/last-beat-state.json"
 }
 
 EVENT_NAME="$(parse_event_name | tr -d '\r\n')"
