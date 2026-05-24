@@ -23,7 +23,8 @@ Do not perform broad ACP scans. This heartbeat supervises only sessions explicit
 
 For each session line:
 
-- Read `<workspace>/.claude/goal-state/last-beat` as a Unix timestamp.
+- Prefer the session line's `last_beat` field when present and parseable as ISO-8601 UTC.
+- Otherwise, read `<workspace>/.claude/goal-state/last-beat` as a Unix timestamp.
 - Compute `last_beat_age = now - last_beat`.
 - If `last_beat_age > 1200` seconds, flag the session as stalled.
 - Read `<workspace>/.claude/goal-state/goal-state.json`.

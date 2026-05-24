@@ -40,13 +40,13 @@ require_readable_nonempty_dir() {
   [ -s "$dir" ] || fail_bootstrap "$label directory is empty: $dir"
 }
 
-write_harness_loaded_beacon() {
+parse_session_id() {
   set +e
-  session_id=""
+  parsed_session_id=""
   if command -v jq >/dev/null 2>&1; then
-    session_id="$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null || true)"
+    parsed_session_id="$(printf '%s' "$input" | jq -r '.session_id // ""' 2>/dev/null || true)"
   elif command -v python3 >/dev/null 2>&1; then
-    session_id="$(INPUT_JSON="$input" python3 - <<'PY' 2>/dev/null || true
+    parsed_session_id="$(INPUT_JSON="$input" python3 - <<'PY' 2>/dev/null || true
 import json
 import os
 
@@ -58,8 +58,16 @@ print(data.get("session_id") or "")
 PY
 )"
   fi
-  session_id="$(printf '%s' "$session_id" | tr -d '\r\n')"
-  printf '%s %s\n' "$(date +%s)" "$session_id" > "$STATE_DIR/harness-loaded" 2>/dev/null || true
+  parsed_session_id="$(printf '%s' "$parsed_session_id" | tr -d '\r\n')"
+  printf '%s' "$parsed_session_id"
+  set -e
+}
+
+SESSION_ID="$(parse_session_id || true)"
+
+write_harness_loaded_beacon() {
+  set +e
+  printf '%s %s\n' "$(date +%s)" "$SESSION_ID" > "$STATE_DIR/harness-loaded" 2>/dev/null || true
   set -e
 }
 
@@ -72,7 +80,7 @@ warn_workspace_cwd_mismatch() {
     set -e
     return 0
   fi
-  SESSION_START_INPUT="$input" ACTIVE_FILE="$active_file" SESSION_WORKDIR="$WORKDIR" MARKER_FILE="$marker_file" GOAL_STATE_FILE="$goal_state_file" python3 - <<'PY' || true
+  SESSION_START_INPUT="$input" SESSION_START_SESSION_ID="$SESSION_ID" ACTIVE_FILE="$active_file" SESSION_WORKDIR="$WORKDIR" MARKER_FILE="$marker_file" GOAL_STATE_FILE="$goal_state_file" python3 - <<'PY' || true
 import json
 import os
 import sys
@@ -98,7 +106,9 @@ try:
 except json.JSONDecodeError:
     hook_input = {}
 
-session_id = str(hook_input.get("session_id") or "").strip()
+session_id = str(os.environ.get("SESSION_START_SESSION_ID") or "").strip()
+if not session_id:
+    session_id = str(hook_input.get("session_id") or "").strip()
 
 workdir = physical(os.environ.get("SESSION_WORKDIR", os.getcwd()))
 marker_path = Path(os.environ.get("MARKER_FILE", ""))
@@ -179,10 +189,44 @@ PY
   set -e
 }
 
+launch_liveness_keepalive() {
+  set +e
+  # HARNESS_LIVENESS_KEEPALIVE=0 disables the session-lifetime liveness watcher.
+  if [ "${HARNESS_LIVENESS_KEEPALIVE:-1}" = "0" ]; then
+    set -e
+    return 0
+  fi
+
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+  keepalive="$script_dir/../scripts/liveness-keepalive.sh"
+  [ -x "$keepalive" ] || { set -e; return 0; }
+  [ -d "$STATE_DIR" ] || { set -e; return 0; }
+
+  interval="${HARNESS_LIVENESS_INTERVAL:-30}"
+  log_file="$STATE_DIR/liveness-keepalive.log"
+  # SessionStart runs as a child of the Claude session process, so PPID is the
+  # long-lived process whose liveness should keep the goal heartbeat fresh.
+  args=("$keepalive" "$PPID" "$WORKDIR" "--interval" "$interval")
+  if [ -n "$SESSION_ID" ]; then
+    args+=("--session-id" "$SESSION_ID")
+  fi
+
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "${args[@]}" >> "$log_file" 2>&1 < /dev/null &
+  else
+    nohup "${args[@]}" >> "$log_file" 2>&1 < /dev/null &
+  fi
+  disown "$!" 2>/dev/null || true
+
+  set -e
+  return 0
+}
+
 mkdir -p "$STATE_DIR" || fail_bootstrap "could not create goal-state directory: $STATE_DIR"
 # This beacon's presence proves the plugin loaded for the session; its absence for a registered goal proves it did not (the silent-load detector).
 write_harness_loaded_beacon || true
 warn_workspace_cwd_mismatch || true
+launch_liveness_keepalive || true
 require_readable_nonempty_dir "$STATE_DIR" ".claude/goal-state"
 
 if [ ! -f "$PROGRESS" ]; then

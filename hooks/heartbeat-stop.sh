@@ -20,6 +20,7 @@ set -euo pipefail
 
 input="$(cat)"
 WORKDIR="${PWD}"
+WORKDIR_PHYSICAL="$(pwd -P 2>/dev/null || printf '%s' "$WORKDIR")"
 STATE_DIR="$WORKDIR/.claude/goal-state"
 mkdir -p "$STATE_DIR"
 PREVIOUS_LAST_BEAT=""
@@ -85,10 +86,127 @@ PY
   printf '{"source":"stop-hook","session_id":null,"hook_event_name":null,"background_tasks":null,"session_crons":null}\n' > "$STATE_DIR/last-beat-state.json"
 }
 
+update_active_session_last_beat() {
+  set +e
+  active_home="${HOME:-}"
+  [ -n "$active_home" ] || { set -e; return 0; }
+  active_file="$active_home/.claude/goal-sessions/active.jsonl"
+  [ -f "$active_file" ] || { set -e; return 0; }
+  command -v python3 >/dev/null 2>&1 || { set -e; return 0; }
+
+  last_beat="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  run_active_update_python() {
+    INPUT_JSON="$input" \
+    ACTIVE_FILE="$active_file" \
+    WORKDIR_PHYSICAL="$WORKDIR_PHYSICAL" \
+    ACTIVE_LAST_BEAT="$last_beat" \
+    ACTIVE_UPDATE_LOCK_WITH_FCNTL="${1:-0}" \
+    python3 - <<'PY'
+import json
+import os
+import tempfile
+from pathlib import Path
+
+active = Path(os.environ["ACTIVE_FILE"])
+if not active.exists():
+    raise SystemExit(0)
+
+raw_input = os.environ.get("INPUT_JSON", "")
+try:
+    hook = json.loads(raw_input) if raw_input.strip() else {}
+except json.JSONDecodeError:
+    hook = {}
+if not isinstance(hook, dict):
+    hook = {}
+
+session_id = str(hook.get("session_id") or "").strip()
+workspace = os.environ.get("WORKDIR_PHYSICAL", "").strip()
+last_beat = os.environ["ACTIVE_LAST_BEAT"]
+
+
+def update_file():
+    if not active.exists():
+        return
+
+    text = active.read_text(encoding="utf-8")
+    chunks = text.splitlines(keepends=True)
+    updated = []
+    changed = False
+
+    for chunk in chunks:
+        line = chunk.rstrip("\r\n")
+        newline = chunk[len(line):]
+        if not line.strip():
+            updated.append(chunk)
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            updated.append(chunk)
+            continue
+        if not isinstance(record, dict):
+            updated.append(chunk)
+            continue
+
+        record_session_id = str(record.get("session_id") or "").strip()
+        record_workspace = str(record.get("workspace") or "").strip()
+        if (session_id and record_session_id == session_id) or (workspace and record_workspace == workspace):
+            record["last_beat"] = last_beat
+            updated.append(json.dumps(record, separators=(",", ":")) + newline)
+            changed = True
+        else:
+            updated.append(chunk)
+
+    if not changed:
+        return
+
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{active.name}.",
+        suffix=".tmp",
+        dir=str(active.parent),
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write("".join(updated))
+        os.replace(temp_name, active)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+
+
+if os.environ.get("ACTIVE_UPDATE_LOCK_WITH_FCNTL") == "1":
+    import fcntl
+
+    lock = active.with_suffix(active.suffix + ".lock")
+    with lock.open("a", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        update_file()
+else:
+    update_file()
+PY
+  }
+
+  lock="$active_file.lock"
+  if command -v flock >/dev/null 2>&1; then
+    ( flock 9 && run_active_update_python 0 ) 9>"$lock" >/dev/null 2>&1 || true
+  else
+    run_active_update_python 1 >/dev/null 2>&1 || true
+  fi
+
+  set -e
+  return 0
+}
+
 EVENT_NAME="$(parse_event_name | tr -d '\r\n')"
 
 date +%s > "$STATE_DIR/last-beat"
 write_state_snapshot
+update_active_session_last_beat
 
 # SubagentStop is a heartbeat tick, not a turn boundary. The parent Stop will
 # run the goal check. If we increment the block-counter here, a subagent that

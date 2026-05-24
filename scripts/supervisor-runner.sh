@@ -128,7 +128,7 @@ def read_last_beat(path):
         return None, str(path)
 
 
-def parse_started_at(value):
+def parse_timestamp(value):
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -138,10 +138,17 @@ def parse_started_at(value):
         if stripped.isdigit():
             return int(stripped)
         try:
-            return int(datetime.fromisoformat(stripped.replace("Z", "+00:00")).timestamp())
+            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return int(parsed.astimezone(timezone.utc).timestamp())
         except Exception:
             return None
     return None
+
+
+def parse_started_at(value):
+    return parse_timestamp(value)
 
 
 def session_message(session, age_seconds, last_beat_path):
@@ -210,14 +217,21 @@ for raw_line in raw_lines:
             completed = True
 
         if not completed:
-            last_beat, last_beat_error = read_last_beat(Path(last_beat_path))
-            if last_beat_error:
-                missing_paths.append(last_beat_error)
-                stalled = True
-            else:
-                last_beat_age = max(0, now - last_beat)
+            active_last_beat = parse_timestamp(session.get("last_beat"))
+            if active_last_beat is not None:
+                last_beat_path = f"{active_ledger}:last_beat"
+                last_beat_age = max(0, now - active_last_beat)
                 if last_beat_age > stall_threshold:
                     stalled = True
+            else:
+                last_beat, last_beat_error = read_last_beat(Path(last_beat_path))
+                if last_beat_error:
+                    missing_paths.append(last_beat_error)
+                    stalled = True
+                else:
+                    last_beat_age = max(0, now - last_beat)
+                    if last_beat_age > stall_threshold:
+                        stalled = True
 
     if completed:
         started_at = parse_started_at(session.get("started_at"))

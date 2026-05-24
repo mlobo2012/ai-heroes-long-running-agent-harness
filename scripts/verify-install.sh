@@ -317,6 +317,15 @@ check_scope_policy_tests_present() {
   done
 }
 
+check_liveness_keepalive_present() {
+  [ -x "$PLUGIN_DIR/tests/heartbeat/liveness-keepalive.sh" ] || return 1
+  [ -x "$PLUGIN_DIR/scripts/liveness-keepalive.sh" ] || return 1
+  bash -n "$PLUGIN_DIR/scripts/liveness-keepalive.sh" || return 1
+  bash -n "$PLUGIN_DIR/tests/heartbeat/liveness-keepalive.sh" || return 1
+  bash -n "$PLUGIN_DIR/hooks/session-start.sh" || return 1
+  grep -q 'liveness-keepalive' "$PLUGIN_DIR/hooks/session-start.sh"
+}
+
 check_scope_policy_docs_present() {
   [ -f "$PLUGIN_DIR/docs/scope-policies.md" ] || return 1
   [ -f "$PLUGIN_DIR/docs/examples/production-hardening-prompt.md" ]
@@ -393,6 +402,7 @@ if [ "$SCOPE" = "core" ] || [ "$SCOPE" = "all" ]; then
   check "scope_policy field is optional and enumerated" check_scope_policy_optional_enum
   check "blocker ledger scripts executable" check_blocker_scripts_executable
   check "scope-policy lifecycle tests present" check_scope_policy_tests_present
+  check "session liveness keepalive present and wired" check_liveness_keepalive_present
   check "scope-policy docs present" check_scope_policy_docs_present
   check "benchmark docs present" check_benchmark_docs_present
   check "benchmark collector executable" check_benchmark_collector_executable
