@@ -53,7 +53,7 @@ done
 
 GOAL="${1:-}"
 
-if [ -z "$AGENT" ] || [ -z "$CHANNEL" ] || [ -z "$WORKSPACE" ] || [ -z "$LAUNCHER" ] || [ -z "$GOAL" ]; then
+if [ -z "$AGENT" ] || [ -z "$WORKSPACE" ] || [ -z "$LAUNCHER" ] || [ -z "$GOAL" ]; then
   usage >&2
   exit 2
 fi
@@ -190,7 +190,7 @@ append_active() {
     lock="$ACTIVE_FILE.lock"
     (
       flock 9
-      LINE="$line" ACTIVE_FILE="$ACTIVE_FILE" ACTIVE_BACKUP="$ACTIVE_BACKUP" WORKSPACE="$WORKSPACE" python3 - <<'PY'
+      LINE="$line" ACTIVE_FILE="$ACTIVE_FILE" ACTIVE_BACKUP="$ACTIVE_BACKUP" WORKSPACE="$WORKSPACE" CHANNEL="$CHANNEL" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -200,6 +200,7 @@ active.parent.mkdir(parents=True, exist_ok=True)
 backup = Path(os.environ["ACTIVE_BACKUP"])
 new_line = os.environ["LINE"]
 new_ws = os.environ["WORKSPACE"]
+new_channel = os.environ["CHANNEL"]
 if active.exists():
     backup.write_bytes(active.read_bytes())
 else:
@@ -217,6 +218,8 @@ if active.exists():
             continue
         if data.get("workspace") == new_ws:
             continue
+        if new_channel and data.get("channel") == new_channel:
+            continue
         kept.append(raw)
 kept.append(new_line)
 tmp = active.with_suffix(active.suffix + ".tmp")
@@ -226,7 +229,7 @@ PY
     ) 9>"$lock"
     return 0
   fi
-  LINE="$line" ACTIVE_FILE="$ACTIVE_FILE" ACTIVE_BACKUP="$ACTIVE_BACKUP" WORKSPACE="$WORKSPACE" python3 - <<'PY'
+  LINE="$line" ACTIVE_FILE="$ACTIVE_FILE" ACTIVE_BACKUP="$ACTIVE_BACKUP" WORKSPACE="$WORKSPACE" CHANNEL="$CHANNEL" python3 - <<'PY'
 import fcntl
 import json
 import os
@@ -238,6 +241,7 @@ backup = Path(os.environ["ACTIVE_BACKUP"])
 lock = active.with_suffix(active.suffix + ".lock")
 new_line = os.environ["LINE"]
 new_ws = os.environ["WORKSPACE"]
+new_channel = os.environ["CHANNEL"]
 with lock.open("a") as lock_file:
     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
     if active.exists():
@@ -256,6 +260,8 @@ with lock.open("a") as lock_file:
                 kept.append(raw)
                 continue
             if data.get("workspace") == new_ws:
+                continue
+            if new_channel and data.get("channel") == new_channel:
                 continue
             kept.append(raw)
     kept.append(new_line)
