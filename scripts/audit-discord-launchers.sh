@@ -5,9 +5,10 @@ set -euo pipefail
 # Accepted plugin-loading directives:
 #  - claude receives --plugin-dir <path-containing-discord-long-running-harness>
 #  - the launcher references a settings.json path from discord-long-running-harness
-#  - the launcher exports CLAUDE_PLUGIN_DIR, CLAUDE_PLUGIN_DIRS, or
-#    CLAUDE_PLUGIN_ROOT with a discord-long-running-harness path before
-#    invoking claude.
+#  - the launcher exports CLAUDE_PLUGIN_DIR, CLAUDE_PLUGIN_DIRS,
+#    CLAUDE_PLUGIN_ROOT, or CLAUDECLAW_AGENT_PLUGIN_DIRS with a
+#    discord-long-running-harness path before invoking claude or a gateway
+#    wrapper that will spawn claude per message.
 #
 # AUDIT_LAUNCHER_DIR can point tests at a fixture directory. By default the
 # audit scans ~/.claude/channels/discord/start-*.sh and mutates nothing.
@@ -32,7 +33,7 @@ if not re.search(r"\bclaude\b", text):
 patterns = [
     ("plugin-dir", rf"--plugin-dir(?:=|\s+)['\"]?[^\s'\"\\]*{plugin_name}[^\s'\"\\]*['\"]?"),
     ("settings-json", rf"{plugin_name}[^\n]*settings\.json|settings\.json[^\n]*{plugin_name}"),
-    ("exported-plugin-env", rf"(?:export\s+)?(?:CLAUDE_PLUGIN_DIRS?|CLAUDE_PLUGIN_ROOT)=['\"]?[^\s'\"\\]*{plugin_name}[^\s'\"\\]*['\"]?"),
+    ("exported-plugin-env", rf"(?:export\s+)?(?:CLAUDE_PLUGIN_DIRS?|CLAUDE_PLUGIN_ROOT|CLAUDECLAW_AGENT_PLUGIN_DIRS)=['\"]?[^\s'\"\\]*{plugin_name}[^\s'\"\\]*['\"]?"),
 ]
 
 for method, pattern in patterns:
@@ -58,7 +59,7 @@ detect_method_grep() {
     printf 'settings-json\n'
     return 0
   fi
-  if grep -Eq -- "(export[[:space:]]+)?(CLAUDE_PLUGIN_DIRS?|CLAUDE_PLUGIN_ROOT)=[^[:space:]]*${PLUGIN_NAME}" "$file"; then
+  if grep -Eq -- "(export[[:space:]]+)?(CLAUDE_PLUGIN_DIRS?|CLAUDE_PLUGIN_ROOT|CLAUDECLAW_AGENT_PLUGIN_DIRS)=[^[:space:]]*${PLUGIN_NAME}" "$file"; then
     printf 'exported-plugin-env\n'
     return 0
   fi

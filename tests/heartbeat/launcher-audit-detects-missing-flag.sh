@@ -29,7 +29,14 @@ set -euo pipefail
 exec claude "$@"
 BAD
 
-chmod +x "$SCRATCH_ROOT/start-good.sh" "$SCRATCH_ROOT/start-missing.sh"
+cat > "$SCRATCH_ROOT/start-gateway.sh" <<'GATEWAY'
+#!/usr/bin/env bash
+set -euo pipefail
+export CLAUDECLAW_AGENT_PLUGIN_DIRS=/Users/marco/.claude/plugins/discord-long-running-harness
+exec bin/start-agent-gateway.sh richard
+GATEWAY
+
+chmod +x "$SCRATCH_ROOT/start-good.sh" "$SCRATCH_ROOT/start-gateway.sh" "$SCRATCH_ROOT/start-missing.sh"
 
 set +e
 AUDIT_LAUNCHER_DIR="$SCRATCH_ROOT" "$AUDIT" > "$SCRATCH_ROOT/audit.out" 2>&1
@@ -38,8 +45,9 @@ set -e
 
 [ "$status" -ne 0 ] || fail "audit unexpectedly passed with a missing plugin flag"
 grep -q '^PASS good plugin-dir$' "$SCRATCH_ROOT/audit.out" || fail "good launcher did not PASS via plugin-dir"
+grep -q '^PASS gateway exported-plugin-env$' "$SCRATCH_ROOT/audit.out" || fail "gateway launcher did not PASS via CLAUDECLAW_AGENT_PLUGIN_DIRS"
 grep -q '^FAIL missing missing-plugin-dir$' "$SCRATCH_ROOT/audit.out" || fail "missing launcher did not FAIL"
-grep -q '^audit total=2 pass=1 fail=1$' "$SCRATCH_ROOT/audit.out" || fail "audit summary was unexpected"
+grep -q '^audit total=3 pass=2 fail=1$' "$SCRATCH_ROOT/audit.out" || fail "audit summary was unexpected"
 
 cat "$SCRATCH_ROOT/audit.out"
 echo "PASS - launcher audit detects a missing --plugin-dir flag"
