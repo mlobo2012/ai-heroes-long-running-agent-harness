@@ -1,0 +1,35 @@
+SUITE track-read
+RUN tests/track-read/evidence-dir-logged.sh
+  PASS - track-read still logs plain evidence directory files
+RESULT PASS tests/track-read/evidence-dir-logged.sh exit=0
+RUN tests/track-read/log-path-project-dir-target.sh
+  PASS - track-read writes CLAUDE_PROJECT_DIR read log when cwd differs
+RESULT PASS tests/track-read/log-path-project-dir-target.sh exit=0
+RUN tests/track-read/log-path-stable-project-dir.sh
+  PASS - track-read and verify-gate share CLAUDE_PROJECT_DIR read log across cwd changes
+RESULT PASS tests/track-read/log-path-stable-project-dir.sh exit=0
+RUN tests/track-read/underscore-evidence-logged.sh
+  PASS - track-read logs underscore evidence markdown and ignores non-evidence markdown
+RESULT PASS tests/track-read/underscore-evidence-logged.sh exit=0
+SUITE-TALLY track-read total=4 passed=4 failed=0
+SUITE verify-gate
+RUN tests/verify-gate/add-item-allowed.sh
+  PASS - verify-gate allows adding non-passing items without evidence
+RESULT PASS tests/verify-gate/add-item-allowed.sh exit=0
+RUN tests/verify-gate/batch-two-flips-allowed.sh
+  PASS - verify-gate allows batch flips with per-row evidence and blocks partial evidence
+RESULT PASS tests/verify-gate/batch-two-flips-allowed.sh exit=0
+RUN tests/verify-gate/flip-without-evidence-blocks.sh
+  PASS - verify-gate blocks false-to-true flips without row-matched evidence
+RESULT PASS tests/verify-gate/flip-without-evidence-blocks.sh exit=0
+RUN tests/verify-gate/no-flip-metadata-allowed.sh
+  PASS - verify-gate allows no-flip metadata and true-to-false edits
+RESULT PASS tests/verify-gate/no-flip-metadata-allowed.sh exit=0
+RUN tests/verify-gate/single-flip-requires-evidence.sh
+  PASS - verify-gate requires and consumes evidence for a single flip
+RESULT PASS tests/verify-gate/single-flip-requires-evidence.sh exit=0
+SUITE-TALLY verify-gate total=5 passed=5 failed=0
+FINAL-TALLY total=9 passed=9 failed=0
+SYNTAX
+SYNTAX-RESULT PASS hooks/track-read.sh exit=0
+SYNTAX-RESULT PASS hooks/verify-gate.sh exit=0

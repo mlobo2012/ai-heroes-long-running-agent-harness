@@ -1,0 +1,7 @@
+INSTALL-DIR /Users/marco/.claude/plugins/discord-long-running-harness/hooks
+BACKUP /Users/marco/.claude/plugins/discord-long-running-harness/hooks/track-read.sh.bak.20260525233004
+BACKUP /Users/marco/.claude/plugins/discord-long-running-harness/hooks/verify-gate.sh.bak.20260525233004
+OVERWRITE /Users/marco/.claude/plugins/discord-long-running-harness/hooks/track-read.sh
+OVERWRITE /Users/marco/.claude/plugins/discord-long-running-harness/hooks/verify-gate.sh
+SYNTAX PASS /Users/marco/.claude/plugins/discord-long-running-harness/hooks/track-read.sh
+SYNTAX PASS /Users/marco/.claude/plugins/discord-long-running-harness/hooks/verify-gate.sh

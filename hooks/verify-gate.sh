@@ -9,7 +9,15 @@
 # This is a teaching example, not a security boundary. Known gaps a real
 # enforcement layer would close: this only hooks Write/Edit (Bash sed/jq can
 # rewrite the file unchecked). Tighten in your project as needed.
-log="${VERIFY_READ_LOG:-./.claude/.evidence-reads}"
+if [ -n "${VERIFY_READ_LOG:-}" ]; then
+  log="$VERIFY_READ_LOG"
+elif [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  log="$CLAUDE_PROJECT_DIR/.claude/.evidence-reads"
+elif git_root="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -n "$git_root" ]; then
+  log="$git_root/.claude/.evidence-reads"
+else
+  log="./.claude/.evidence-reads"
+fi
 results="${RESULTS_FILE:-test-results.json}"
 
 input=$(cat)
