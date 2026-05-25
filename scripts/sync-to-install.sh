@@ -41,7 +41,7 @@ scaffold_git_root() {
     return 0
   fi
   [ -d "$SRC_DIR/.git" ] || return 0
-  rm -f "$DEST_DIR/.git"
+  rm -rf "$DEST_DIR/.git"
   mkdir -p "$DEST_DIR/.git"
   while IFS= read -r path; do
     rel="${path#"$SRC_DIR/"}"
