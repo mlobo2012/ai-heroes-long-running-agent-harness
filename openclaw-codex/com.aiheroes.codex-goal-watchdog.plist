@@ -10,33 +10,27 @@
   <array>
     <string>/bin/bash</string>
     <string>/Users/marco/.openclaw/tools/watchdog-codex-goal.sh</string>
-    <string>--goal-cron-id</string>
-    <string>5bc887d4-f790-4b78-badc-af101a393831</string>
-    <string>--session-key</string>
-    <string>agent:schmidty:goal:tilores-reddit-batch</string>
-    <string>--contract</string>
-    <string>/Users/marco/.openclaw/workspace-schmidty/goals/tilores-reddit-batch/contract.json</string>
-    <string>--lock</string>
-    <string>/Users/marco/.openclaw/workspace-schmidty/goals/tilores-reddit-batch/state/running.lock</string>
-    <string>--timeout-seconds</string>
-    <string>720</string>
-    <string>--cooldown-seconds</string>
-    <string>300</string>
-    <string>--state-dir</string>
-    <string>/Users/marco/.openclaw/workspace-schmidty/goals/tilores-reddit-batch/state</string>
-    <string>--once</string>
+    <string>--sweep</string>
+    <string>--ledger</string>
+    <string>/Users/marco/.claude/goal-sessions/active.jsonl</string>
   </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/marco/local/node-v22.16.0-darwin-arm64/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
 
   <key>StartInterval</key>
   <integer>180</integer>
 
   <key>RunAtLoad</key>
-  <false/>
+  <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/marco/.openclaw/workspace-schmidty/goals/tilores-reddit-batch/state/watchdog-launchd.out.log</string>
+  <string>/Users/marco/.openclaw/tools/logs/codex-goal-watchdog.out.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/marco/.openclaw/workspace-schmidty/goals/tilores-reddit-batch/state/watchdog-launchd.err.log</string>
+  <string>/Users/marco/.openclaw/tools/logs/codex-goal-watchdog.err.log</string>
 </dict>
 </plist>

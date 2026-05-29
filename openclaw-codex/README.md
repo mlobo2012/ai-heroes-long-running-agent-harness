@@ -56,13 +56,35 @@ The installer creates `<workspace-root>/<slug>/`, `docs/`, `state/`, installs `c
 
 ## Watchdog And Supervisor
 
-`watchdog-codex-goal.sh` is copied from the fixed live watchdog. Use `com.aiheroes.codex-goal-watchdog.plist` as the launchd template; customize its cron id, session key, contract path, lock path, and state dir for the registered goal. Running the installer with `--enable` enables the OpenClaw cron and prints the launchd commands used to wire this watchdog template.
-
-Launchd enable command after installing the customized plist:
+`watchdog-codex-goal.sh` is copied from the fixed live watchdog. It still supports the original single-goal mode:
 
 ```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aiheroes.codex-goal-watchdog.plist
-launchctl enable gui/$(id -u)/com.aiheroes.codex-goal-watchdog
+watchdog-codex-goal.sh \
+  --goal-cron-id <cron-id> \
+  --session-key agent:<agent>:goal:<slug> \
+  --contract <workspace>/contract.json \
+  --lock <workspace>/state/running.lock
+```
+
+It also supports always-on global sweep mode:
+
+```bash
+watchdog-codex-goal.sh \
+  --sweep \
+  --ledger /Users/marco/.claude/goal-sessions/active.jsonl
+```
+
+Sweep mode reads the unified ledger at `/Users/marco/.claude/goal-sessions/active.jsonl` and checks every line whose `runtime` is `codex-openclaw`. Claude-style ledger rows without that runtime are skipped. Each codex-openclaw row supplies its own `cron_id`, `session_key`, `contract`, and `lock`, then the watchdog runs the same per-goal decision logic used by single-goal mode.
+
+Sweep cooldown and event state are namespaced per session key under `/Users/marco/.openclaw/tools/watchdog-state/sweep/<session-key-slug>/` by default, where characters such as `:` are replaced with `_`. This prevents one goal's refire cooldown from suppressing another goal. Passing `--state-dir <path>` in sweep mode uses `<path>` as the sweep state root.
+
+`com.aiheroes.codex-goal-watchdog.plist` is the always-on launchd job. It runs the live watchdog script with `--sweep --ledger /Users/marco/.claude/goal-sessions/active.jsonl`, has `RunAtLoad` set to true, and runs every 180 seconds with stdout/stderr logs under `/Users/marco/.openclaw/tools/logs/`.
+
+Launchd load command after installing the plist:
+
+```bash
+launchctl bootout gui/$(id -u)/com.aiheroes.codex-goal-watchdog
+launchctl bootstrap gui/$(id -u) /Users/marco/.openclaw/tools/com.aiheroes.codex-goal-watchdog.plist
 ```
 
 Merge `SUPERVISOR-CODEX-PATCH.md` into the goal supervisor heartbeat and create `state/alerting-enabled` in the supervisor workspace before expecting scoped Discord alerts.

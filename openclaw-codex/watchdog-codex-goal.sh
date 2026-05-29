@@ -2,15 +2,34 @@
 
 timeout_seconds=720
 cooldown_seconds=300
+default_ledger_path=/Users/marco/.claude/goal-sessions/active.jsonl
+default_sweep_state_root=/Users/marco/.openclaw/tools/watchdog-state/sweep
 goal_cron_id=
 session_key=
 contract_path=
 lock_path=
 state_dir=
+ledger_path=$default_ledger_path
+sweep_mode=0
 dry_run=0
+log_session_key=
+
+# Self-heal PATH: launchd runs with a minimal PATH that excludes the openclaw CLI
+# (it lives under ~/local/node-*/bin). Without this the openclaw calls silently
+# return nothing and every decision wrongly falls through to lock-based logic.
+if ! command -v openclaw >/dev/null 2>&1; then
+  for _d in /Users/marco/local/node-*/bin "$HOME"/local/node-*/bin /opt/homebrew/bin /usr/local/bin; do
+    if [ -x "$_d/openclaw" ]; then
+      PATH="$_d:$PATH"
+      break
+    fi
+  done
+  export PATH
+fi
 
 usage() {
   printf '%s\n' "Usage: $0 --goal-cron-id ID --session-key KEY --contract PATH --lock PATH [--timeout-seconds N] [--cooldown-seconds N] [--state-dir PATH] [--once] [--dry-run] [--self-test]"
+  printf '%s\n' "       $0 --sweep [--ledger PATH] [--timeout-seconds N] [--cooldown-seconds N] [--state-dir SWEEP_ROOT] [--dry-run]"
 }
 
 iso_now() {
@@ -19,7 +38,11 @@ iso_now() {
 
 log_msg() {
   ts=$(iso_now)
-  line="$ts $*"
+  if [ -n "${log_session_key:-}" ]; then
+    line="$ts session_key=$log_session_key $*"
+  else
+    line="$ts $*"
+  fi
   printf '%s\n' "$line"
   if [ "${dry_run:-0}" -eq 0 ] && [ -n "${state_dir:-}" ]; then
     mkdir -p "$state_dir" 2>/dev/null || true
@@ -245,9 +268,140 @@ refire() {
   return 0
 }
 
+filesystem_safe_session_key() {
+  value=$1
+  slug=$(printf '%s' "$value" | LC_ALL=C sed 's/[^A-Za-z0-9._-]/_/g')
+  if [ -z "$slug" ]; then
+    slug=unknown
+  fi
+  printf '%s\n' "$slug"
+}
+
+ledger_extract_fields() {
+  json_line=$1
+
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s\n' "$json_line" | jq -r '
+      if type == "object" then
+        (.runtime // ""),
+        (.cron_id // ""),
+        (.session_key // ""),
+        (.contract // ""),
+        (.lock // ""),
+        (.agent // ""),
+        (.channel // ""),
+        (.session_id // "")
+      else
+        empty
+      end
+    ' 2>/dev/null
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    LEDGER_JSON=$json_line python3 <<'PY' 2>/dev/null
+import json
+import os
+
+try:
+    data = json.loads(os.environ.get("LEDGER_JSON", ""))
+except Exception:
+    raise SystemExit(0)
+
+if not isinstance(data, dict):
+    raise SystemExit(0)
+
+for key in ("runtime", "cron_id", "session_key", "contract", "lock", "agent", "channel", "session_id"):
+    value = data.get(key) or ""
+    print(str(value))
+PY
+    return 0
+  fi
+
+  return 0
+}
+
+run_sweep() {
+  sweep_state_root=${state_dir:-$default_sweep_state_root}
+
+  if [ -z "$ledger_path" ]; then
+    ledger_path=$default_ledger_path
+  fi
+
+  if [ ! -f "$ledger_path" ]; then
+    state_dir=$sweep_state_root
+    log_session_key=
+    log_msg "decision=ledger-missing, noop sweep=1 ledger=$ledger_path"
+    return 0
+  fi
+
+  checked=0
+  line_no=0
+  while IFS= read -r ledger_line || [ -n "$ledger_line" ]; do
+    line_no=$((line_no + 1))
+    non_space=$(printf '%s' "$ledger_line" | tr -d '[:space:]')
+    if [ -z "$non_space" ]; then
+      continue
+    fi
+
+    fields=$(ledger_extract_fields "$ledger_line")
+    if [ -z "$fields" ]; then
+      if [ "$dry_run" -eq 1 ]; then
+        log_session_key=
+        log_msg "sweep-skip malformed-json line=$line_no"
+      fi
+      continue
+    fi
+
+    runtime=$(printf '%s\n' "$fields" | sed -n '1p')
+    line_cron_id=$(printf '%s\n' "$fields" | sed -n '2p')
+    line_session_key=$(printf '%s\n' "$fields" | sed -n '3p')
+    line_contract=$(printf '%s\n' "$fields" | sed -n '4p')
+    line_lock=$(printf '%s\n' "$fields" | sed -n '5p')
+    line_agent=$(printf '%s\n' "$fields" | sed -n '6p')
+    line_channel=$(printf '%s\n' "$fields" | sed -n '7p')
+    line_session_id=$(printf '%s\n' "$fields" | sed -n '8p')
+
+    if [ "$runtime" != "codex-openclaw" ]; then
+      if [ "$dry_run" -eq 1 ]; then
+        log_session_key=
+        log_msg "sweep-skip runtime=${runtime:-none} agent=${line_agent:-unknown} channel=${line_channel:-unknown} session_id=${line_session_id:-unknown}"
+      fi
+      continue
+    fi
+
+    goal_cron_id=$line_cron_id
+    session_key=$line_session_key
+    contract_path=$line_contract
+    lock_path=$line_lock
+    session_slug=$(filesystem_safe_session_key "$session_key")
+    state_dir="$sweep_state_root/$session_slug"
+    log_session_key=${session_key:-missing}
+    checked=$((checked + 1))
+
+    run_once
+    log_session_key=
+  done < "$ledger_path"
+
+  if [ "$checked" -eq 0 ]; then
+    state_dir=$sweep_state_root
+    log_session_key=
+    log_msg "decision=sweep-complete, noop codex_openclaw_goals=0 ledger=$ledger_path"
+  fi
+
+  return 0
+}
+
 run_once() {
   if [ -z "$goal_cron_id" ] || [ -z "$session_key" ] || [ -z "$contract_path" ] || [ -z "$lock_path" ]; then
     log_msg "decision=config-error, noop missing-required-flags"
+    return 0
+  fi
+
+  # Fail LOUD if the CLI is unreachable — otherwise task-status comes back empty and
+  # we would wrongly noop on lock-based logic (the launchd PATH bug found 2026-05-29).
+  if ! command -v openclaw >/dev/null 2>&1; then
+    log_msg "decision=cli-unreachable, noop warning=openclaw-not-on-PATH cannot-assess-task-status check-launchd-PATH"
     return 0
   fi
 
@@ -457,6 +611,13 @@ while [ "$#" -gt 0 ]; do
       shift
       state_dir=${1:-}
       ;;
+    --sweep)
+      sweep_mode=1
+      ;;
+    --ledger)
+      shift
+      ledger_path=${1:-$default_ledger_path}
+      ;;
     --once)
       ;;
     --dry-run)
@@ -481,5 +642,9 @@ case "$cooldown_seconds" in
   ''|*[!0-9]*) cooldown_seconds=300 ;;
 esac
 
-run_once
+if [ "$sweep_mode" -eq 1 ]; then
+  run_sweep
+else
+  run_once
+fi
 exit 0
