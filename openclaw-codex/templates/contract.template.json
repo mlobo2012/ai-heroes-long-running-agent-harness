@@ -1,0 +1,20 @@
+{
+  "goal": "Replace this with the one-line durable goal.",
+  "owner_runtime": "codex-openclaw",
+  "client": "generic",
+  "channel": "replace-with-discord-channel-id",
+  "rules": [
+    "Work ONE red criterion per heartbeat tick. After each, update this contract plus PROGRESS.md, then stop the tick.",
+    "Do NOT spawn subagents for this goal. Produce inline so no orphaned work is left behind.",
+    "Never go silent on failure. Post a short failure note to the goal channel, delete state/running.lock, and stop so the next tick can re-drive.",
+    "Stay in this lane. Only work on the durable goal described by this contract."
+  ],
+  "items": [
+    {
+      "id": "example-item-1",
+      "description": "Replace this red item with the first concrete unit of work.",
+      "evidence": "docs/example-item-1.md",
+      "passes": false
+    }
+  ]
+}
